@@ -33,12 +33,11 @@ test("extractCompletedUsageFromSse returns completed usage payload", () => {
 });
 
 test("parseProbeLine and statusState read compact probe output", () => {
-  const line =
-    "status=WARN(200) plan=plus profile=test used=81%/9% reset=1h0m/7d0h probe_tokens=10";
+  const line = "status=WARN(200) plan=plus profile=test used=81/9 reset=1h0m/7d0h probe_tokens=10";
   const parsed = parseProbeLine(line);
 
   assert.equal(parsed.status, "WARN(200)");
-  assert.equal(parsed.used, "81%/9%");
+  assert.equal(parsed.used, "81/9");
   assert.equal(parsed.reset, "1h0m/7d0h");
   assert.equal(statusState(parsed.status), "WARN");
 });

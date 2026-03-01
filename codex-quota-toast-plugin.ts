@@ -24,52 +24,74 @@ const ToastThresholdSchema = z.preprocess(
   z.enum(TOAST_THRESHOLDS),
 );
 
-const PairTextSchema = z
-  .string()
-  .trim()
-  .transform((value): [string, string] => {
-    if (value === "") return ["-", "-"];
-    const [left, right] = value.split("/", 2);
-    return [left?.trim() || "-", right?.trim() || "-"];
-  });
+const pairFromText = (raw: string): [string, string] => {
+  const normalized = raw.trim();
+  if (normalized === "") return ["-", "-"];
+  const [left, right] = normalized.split("/", 2);
+  return [left?.trim() || "-", right?.trim() || "-"];
+};
 
-const PositiveIntStringSchema = z
-  .string()
-  .trim()
-  .regex(/^\d+$/)
-  .transform((value) => Number(value))
-  .pipe(z.number().int().positive());
+const textFromUnknown = (value: unknown): string => {
+  if (value === null || value === undefined) return "-";
+  const normalized = String(value).trim();
+  return normalized === "" ? "-" : normalized;
+};
 
-const WindowMinutesPairSchema = z
-  .string()
-  .trim()
-  .transform((value): [number | undefined, number | undefined] => {
-    const [left, right] = value === "" ? ["", ""] : value.split("/", 2);
-    const leftParsed = PositiveIntStringSchema.safeParse(left ?? "");
-    const rightParsed = PositiveIntStringSchema.safeParse(right ?? "");
-    return [
-      leftParsed.success ? leftParsed.data : undefined,
-      rightParsed.success ? rightParsed.data : undefined,
-    ];
-  });
+const pairFromUnknown = (value: unknown): [string, string] => {
+  if (typeof value === "string") return pairFromText(value);
 
-const NormalizedSnapshotSchema = z
-  .object({
-    status: z.string().optional(),
-    error: z.string().optional(),
-    used: z.string().optional(),
-    reset: z.string().optional(),
-    windowMinutes: z.string().optional(),
-  })
-  .transform((value) => {
-    return {
-      status: value.status,
-      error: value.error?.trim() ? value.error.trim() : undefined,
-      used: PairTextSchema.parse(value.used ?? ""),
-      reset: PairTextSchema.parse(value.reset ?? ""),
-      windowMinutes: WindowMinutesPairSchema.parse(value.windowMinutes ?? ""),
+  if (typeof value === "object" && value !== null) {
+    const record = value as {
+      primary?: unknown;
+      secondary?: unknown;
+      windowA?: unknown;
+      windowB?: unknown;
     };
-  });
+    return [
+      textFromUnknown(record.primary ?? record.windowA),
+      textFromUnknown(record.secondary ?? record.windowB),
+    ];
+  }
+
+  return ["-", "-"];
+};
+
+const positiveIntFromUnknown = (value: unknown): number | undefined => {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (!/^\d+$/.test(normalized)) return undefined;
+    const parsed = Number(normalized);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+  }
+
+  return undefined;
+};
+
+const windowMinutesPairFromUnknown = (value: unknown): [number | undefined, number | undefined] => {
+  if (typeof value === "string") {
+    const [left, right] = value.trim() === "" ? ["", ""] : value.split("/", 2);
+    return [positiveIntFromUnknown(left ?? ""), positiveIntFromUnknown(right ?? "")];
+  }
+
+  if (typeof value === "object" && value !== null) {
+    const record = value as {
+      primary?: unknown;
+      secondary?: unknown;
+      windowA?: unknown;
+      windowB?: unknown;
+    };
+    return [
+      positiveIntFromUnknown(record.primary ?? record.windowA),
+      positiveIntFromUnknown(record.secondary ?? record.windowB),
+    ];
+  }
+
+  return [undefined, undefined];
+};
 
 type ToastVariant = "info" | "warning" | "error";
 
@@ -139,19 +161,30 @@ const windowLabelFromMinutes = (minutes: number | undefined, fallback: string): 
   return `${minutes}m window`;
 };
 
+const usageText = (value: string): string => {
+  const normalized = value.trim();
+  if (normalized === "-") return "-";
+  if (normalized.endsWith("%")) return normalized;
+
+  const asNumber = Number.parseFloat(normalized);
+  if (!Number.isFinite(asNumber)) return normalized;
+
+  return `${normalized}%`;
+};
+
 export const messageFromParsed = (parsed: ProbeSnapshot): string => {
-  const normalized = NormalizedSnapshotSchema.parse(parsed);
-  const state = statusState(normalized.status);
-  if (normalized.error) {
-    return `Quota ${state} | ${normalized.error}`;
+  const state = statusState(parsed.status);
+  const error = parsed.error?.trim();
+  if (error) {
+    return `Quota ${state} | ${error}`;
   }
 
-  const [windowA, windowB] = normalized.windowMinutes;
+  const [windowA, windowB] = windowMinutesPairFromUnknown(parsed.windowMinutes);
   const firstWindowLabel = windowLabelFromMinutes(windowA, "window A");
   const secondWindowLabel = windowLabelFromMinutes(windowB, "window B");
-  const [usedHourly, usedWeekly] = normalized.used;
-  const [resetHourly, resetWeekly] = normalized.reset;
-  return `Quota ${state}\n${firstWindowLabel} ${usedHourly} (resets ${resetHourly})\n${secondWindowLabel} ${usedWeekly} (resets ${resetWeekly})`;
+  const [usedWindowA, usedWindowB] = pairFromUnknown(parsed.used);
+  const [resetWindowA, resetWindowB] = pairFromUnknown(parsed.reset);
+  return `Quota ${state}\n${firstWindowLabel} ${usageText(usedWindowA)} (resets ${resetWindowA})\n${secondWindowLabel} ${usageText(usedWindowB)} (resets ${resetWindowB})`;
 };
 
 const errorMessage = (error: unknown): string => {

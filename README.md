@@ -55,9 +55,9 @@ The probe returns one JSON object per run.
 Shape (`ProbeSnapshot`):
 
 - `status` - health label with HTTP context (for example `OK(200)`, `WARN(200)`, `ERROR(auth)`).
-- `used` - quota usage percent pair (`"<windowA>%/<windowB>%"`).
-- `reset` - reset duration pair (`"<windowA>/<windowB>"`, such as `"1h0m/7d0h"`).
-- `windowMinutes` - optional window-size pair from response headers (`"<windowA_minutes>/<windowB_minutes>"`, such as `"300/10080"`).
+- `used` - usage percentages per window object (`{"primary": <percent|null>, "secondary": <percent|null>}`).
+- `reset` - reset duration per window object (`{"primary": <duration|null>, "secondary": <duration|null>}`), for example `{"primary":"1h0m","secondary":"7d0h"}`.
+- `windowMinutes` - optional window-size object from response headers (`{"primary": <minutes|null>, "secondary": <minutes|null>}`), for example `{"primary":300,"secondary":10080}`.
 - `plan` - plan type header value when present.
 - `profile` - profile/limit name header value when present.
 - `probeTokens` - token usage from SSE `response.completed.usage.total_tokens`.
@@ -70,9 +70,9 @@ Success example:
   "status": "WARN(200)",
   "plan": "plus",
   "profile": "default",
-  "used": "81%/9%",
-  "reset": "1h0m/7d0h",
-  "windowMinutes": "300/10080",
+  "used": { "primary": 81, "secondary": 9 },
+  "reset": { "primary": "1h0m", "secondary": "7d0h" },
+  "windowMinutes": { "primary": 300, "secondary": 10080 },
   "probeTokens": 10
 }
 ```

@@ -7,7 +7,6 @@ import {
   durationText,
   extractCompletedUsageFromSse,
   healthLabel,
-  type ProbeResult,
   val,
 } from "./lib/quota-format.js";
 
@@ -44,11 +43,19 @@ const errorMessage = (error: unknown): string => {
 const CODEX_URL = "https://chatgpt.com/backend-api/codex/responses";
 const REQUEST_TIMEOUT_MS = 15_000;
 
-export type ProbeSnapshot = ProbeResult & {
+type WindowPair<T> = {
+  primary: T;
+  secondary: T;
+};
+
+export type ProbeSnapshot = {
+  status: string;
+  used?: WindowPair<number | null> | string;
+  reset?: WindowPair<string | null> | string;
+  windowMinutes?: WindowPair<number | null> | string;
   plan?: string;
   profile?: string;
   probeTokens?: number;
-  windowMinutes?: string;
   error?: string;
 };
 
@@ -57,6 +64,16 @@ const toProbeError = (status: string, detail: string): ProbeSnapshot => {
     status,
     error: detail,
   };
+};
+
+const parseOptionalInt = (raw: string): number | null => {
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseOptionalDuration = (secondsRaw: string): string | null => {
+  const value = durationText(secondsRaw);
+  return value === "-" ? null : value;
 };
 
 export const formatProbeOutput = (snapshot: ProbeSnapshot): string => {
@@ -131,31 +148,32 @@ export const probeQuota = async (): Promise<ProbeSnapshot> => {
   }
 
   const usage = extractCompletedUsageFromSse(responseText);
-  const primaryUsed = val(response.headers, "x-codex-primary-used-percent");
-  const secondaryUsed = val(response.headers, "x-codex-secondary-used-percent");
-  const state = healthLabel(primaryUsed, secondaryUsed);
-  const primaryReset = durationText(
-    val(response.headers, "x-codex-primary-reset-after-seconds", ""),
-  );
-  const secondaryReset = durationText(
-    val(response.headers, "x-codex-secondary-reset-after-seconds", ""),
-  );
-  const primaryWindowMinutes = val(response.headers, "x-codex-primary-window-minutes", "");
-  const secondaryWindowMinutes = val(response.headers, "x-codex-secondary-window-minutes", "");
+  const primaryUsedRaw = val(response.headers, "x-codex-primary-used-percent", "");
+  const secondaryUsedRaw = val(response.headers, "x-codex-secondary-used-percent", "");
+  const state = healthLabel(primaryUsedRaw, secondaryUsedRaw);
+  const primaryResetSeconds = val(response.headers, "x-codex-primary-reset-after-seconds", "");
+  const secondaryResetSeconds = val(response.headers, "x-codex-secondary-reset-after-seconds", "");
+  const primaryWindowMinutesRaw = val(response.headers, "x-codex-primary-window-minutes", "");
+  const secondaryWindowMinutesRaw = val(response.headers, "x-codex-secondary-window-minutes", "");
   const plan = val(response.headers, "x-codex-plan-type");
   const profile = val(response.headers, "x-codex-bengalfox-limit-name");
   const probeTokens = usage?.total_tokens ?? 0;
-  const hasWindowMinutes =
-    primaryWindowMinutes.trim() !== "" || secondaryWindowMinutes.trim() !== "";
+  const primaryUsed = parseOptionalInt(primaryUsedRaw);
+  const secondaryUsed = parseOptionalInt(secondaryUsedRaw);
+  const primaryReset = parseOptionalDuration(primaryResetSeconds);
+  const secondaryReset = parseOptionalDuration(secondaryResetSeconds);
+  const primaryWindowMinutes = parseOptionalInt(primaryWindowMinutesRaw);
+  const secondaryWindowMinutes = parseOptionalInt(secondaryWindowMinutesRaw);
+  const hasWindowMinutes = primaryWindowMinutes !== null || secondaryWindowMinutes !== null;
 
   return {
     status: `${state}(${response.status})`,
     plan,
     profile,
-    used: `${primaryUsed}%/${secondaryUsed}%`,
-    reset: `${primaryReset}/${secondaryReset}`,
+    used: { primary: primaryUsed, secondary: secondaryUsed },
+    reset: { primary: primaryReset, secondary: secondaryReset },
     ...(hasWindowMinutes
-      ? { windowMinutes: `${primaryWindowMinutes}/${secondaryWindowMinutes}` }
+      ? { windowMinutes: { primary: primaryWindowMinutes, secondary: secondaryWindowMinutes } }
       : {}),
     probeTokens,
   };
