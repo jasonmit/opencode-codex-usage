@@ -47,6 +47,10 @@ node ./dist/codex-quota-probe.js
 
 Restart OpenCode after plugin changes.
 
+## 📸 Usage screenshot
+
+![Codex quota toast in OpenCode](/home/elek/Desktop/usage.png)
+
 ## 🧠 Behavior in OpenCode
 
 The plugin checks quota on startup and periodically, then decides whether to show a toast.
