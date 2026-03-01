@@ -1,13 +1,44 @@
 {
   "name": "opencode-codex-usage",
+  "version": "0.1.0",
   "private": true,
+  "description": "Codex quota probe and OpenCode toast plugin",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jasonmit/opencode-codex-usage.git"
+  },
+  "homepage": "https://github.com/jasonmit/opencode-codex-usage#readme",
+  "bugs": {
+    "url": "https://github.com/jasonmit/opencode-codex-usage/issues"
+  },
+  "keywords": [
+    "opencode",
+    "codex",
+    "plugin",
+    "quota",
+    "tui"
+  ],
   "type": "module",
+  "main": "dist/codex-quota-toast-plugin.js",
+  "bin": {
+    "codex-quota-probe": "dist/codex-quota-probe.js"
+  },
+  "files": [
+    "dist/codex-quota-probe.js",
+    "dist/codex-quota-toast-plugin.js",
+    "dist/lib/**/*.js",
+    "README.md"
+  ],
   "scripts": {
     "clean": "rimraf dist",
     "build": "npm run clean && tsc -p tsconfig.json",
     "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "prepack": "npm run build",
+    "pack:dry": "npm pack --dry-run",
+    "pack": "npm pack"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",

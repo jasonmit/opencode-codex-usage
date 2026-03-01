@@ -81,6 +81,39 @@ npm run build
 npm test
 ```
 
+## 📦 Distribution
+
+Build locally:
+
+```bash
+npm install
+npm run build
+```
+
+Reference the built plugin from your checkout in OpenCode config:
+
+```json
+"/absolute/path/to/opencode-codex-usage/dist/codex-quota-toast-plugin.js"
+```
+
+Optionally preview package contents locally:
+
+```bash
+npm run pack:dry
+```
+
+Create a distributable tarball:
+
+```bash
+npm run pack
+```
+
+Install a local tarball in another project:
+
+```bash
+npm install /absolute/path/to/opencode-codex-usage-0.1.0.tgz
+```
+
 ## 📝 Notes
 
 - `dist/` is generated output; edit TypeScript sources in the repo root and `lib/`.
