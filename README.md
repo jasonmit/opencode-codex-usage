@@ -6,21 +6,21 @@ This is a personal utility that I open-sourced in case it is useful to others.
 
 This project provides:
 
-- a small probe that returns a compact one-line quota summary, and
-- an OpenCode TUI plugin that turns that status into in-app toast notifications.
+- an OpenCode TUI plugin that surfaces Codex quota status as in-app toast notifications, and
+- an optional probe utility that returns the same status as structured JSON.
 
 ## ✨ What this project does
 
 - Replaces routine web usage dashboard checks with in-app quota visibility.
-- Shows quota status in a compact format suitable for CLI and logs.
 - Displays OpenCode TUI toast notifications for quota state.
 - Supports a low-noise mode where background checks only toast on warning/error states.
 - Works across Linux, macOS, and Windows.
+- Includes an optional JSON probe output for scripting and diagnostics.
 
 ## 🗂️ Repository layout
 
-- `codex-quota-probe.ts` - CLI probe entrypoint.
 - `codex-quota-toast-plugin.ts` - OpenCode TUI toast plugin.
+- `codex-quota-probe.ts` - optional probe utility entrypoint.
 - `lib/` - shared formatting and path-resolution utilities.
 - `tests/` - unit tests for core parsing/formatting logic.
 - `dist/` - compiled JavaScript output.
@@ -34,7 +34,7 @@ npm install
 npm run build
 ```
 
-2. Run the probe manually:
+2. (Optional) Run the probe manually:
 
 ```bash
 node ./dist/codex-quota-probe.js
@@ -47,6 +47,44 @@ node ./dist/codex-quota-probe.js
 ```
 
 Restart OpenCode after plugin changes.
+
+## 📤 Probe output
+
+The probe returns one JSON object per run.
+
+Shape (`ProbeSnapshot`):
+
+- `status` - health label with HTTP context (for example `OK(200)`, `WARN(200)`, `ERROR(auth)`).
+- `used` - primary/secondary usage percent string (`"<primary>%/<secondary>%"`).
+- `reset` - primary/secondary reset durations (`"<primary>/<secondary>"`, such as `"1h0m/7d0h"`).
+- `plan` - plan type header value when present.
+- `profile` - profile/limit name header value when present.
+- `probeTokens` - token usage from SSE `response.completed.usage.total_tokens`.
+- `error` - short error detail; present on failures.
+
+Success example:
+
+```json
+{
+  "status": "WARN(200)",
+  "plan": "plus",
+  "profile": "default",
+  "used": "81%/9%",
+  "reset": "1h0m/7d0h",
+  "probeTokens": 10
+}
+```
+
+Error example:
+
+```json
+{ "status": "ERROR(auth)", "error": "missing access token" }
+```
+
+Compatibility notes:
+
+- Consumers should tolerate missing fields on error responses.
+- New fields may be added over time; existing keys are kept stable.
 
 ## 📸 Usage screenshot
 
@@ -135,4 +173,4 @@ pwd
 ## 📝 Notes
 
 - `dist/` is generated output; edit TypeScript sources in the repo root and `lib/`.
-- The probe output format is intentionally compact so it is easy to parse and display.
+- The probe output is structured JSON intended for machine parsing and display.

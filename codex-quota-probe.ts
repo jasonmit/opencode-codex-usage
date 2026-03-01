@@ -58,18 +58,8 @@ const toProbeError = (status: string, detail: string): ProbeSnapshot => {
   };
 };
 
-export const formatProbeLine = (snapshot: ProbeSnapshot): string => {
-  if (snapshot.error) {
-    return `status=${snapshot.status} error=${snapshot.error}`;
-  }
-
-  const plan = snapshot.plan ?? "-";
-  const profile = snapshot.profile ?? "-";
-  const used = snapshot.used ?? "-/-";
-  const reset = snapshot.reset ?? "-/-";
-  const probeTokens = snapshot.probeTokens ?? 0;
-
-  return `status=${snapshot.status} plan=${plan} profile=${profile} used=${used} reset=${reset} probe_tokens=${probeTokens}`;
+export const formatProbeOutput = (snapshot: ProbeSnapshot): string => {
+  return JSON.stringify(snapshot);
 };
 
 export const probeQuota = async (): Promise<ProbeSnapshot> => {
@@ -165,7 +155,7 @@ export const probeQuota = async (): Promise<ProbeSnapshot> => {
 
 export const probeQuotaLine = async (): Promise<string> => {
   const snapshot = await probeQuota();
-  return formatProbeLine(snapshot);
+  return formatProbeOutput(snapshot);
 };
 
 const runCli = async (): Promise<void> => {
