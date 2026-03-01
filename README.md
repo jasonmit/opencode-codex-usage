@@ -34,16 +34,16 @@ npm install
 npm run build
 ```
 
-2. (Optional) Run the probe manually:
-
-```bash
-node ./dist/codex-quota-probe.js
-```
-
-3. Reference the built plugin in your OpenCode config (`plugin` array):
+2. Reference the built plugin in your OpenCode config (`plugin` array):
 
 ```json
 "/absolute/path/to/opencode-codex-usage/dist/codex-quota-toast-plugin.js"
+```
+
+3. (Optional) Run the probe manually:
+
+```bash
+node ./dist/codex-quota-probe.js
 ```
 
 Restart OpenCode after plugin changes.
