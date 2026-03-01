@@ -24,6 +24,53 @@ const ToastThresholdSchema = z.preprocess(
   z.enum(TOAST_THRESHOLDS),
 );
 
+const PairTextSchema = z
+  .string()
+  .trim()
+  .transform((value): [string, string] => {
+    if (value === "") return ["-", "-"];
+    const [left, right] = value.split("/", 2);
+    return [left?.trim() || "-", right?.trim() || "-"];
+  });
+
+const PositiveIntStringSchema = z
+  .string()
+  .trim()
+  .regex(/^\d+$/)
+  .transform((value) => Number(value))
+  .pipe(z.number().int().positive());
+
+const WindowMinutesPairSchema = z
+  .string()
+  .trim()
+  .transform((value): [number | undefined, number | undefined] => {
+    const [left, right] = value === "" ? ["", ""] : value.split("/", 2);
+    const leftParsed = PositiveIntStringSchema.safeParse(left ?? "");
+    const rightParsed = PositiveIntStringSchema.safeParse(right ?? "");
+    return [
+      leftParsed.success ? leftParsed.data : undefined,
+      rightParsed.success ? rightParsed.data : undefined,
+    ];
+  });
+
+const NormalizedSnapshotSchema = z
+  .object({
+    status: z.string().optional(),
+    error: z.string().optional(),
+    used: z.string().optional(),
+    reset: z.string().optional(),
+    windowMinutes: z.string().optional(),
+  })
+  .transform((value) => {
+    return {
+      status: value.status,
+      error: value.error?.trim() ? value.error.trim() : undefined,
+      used: PairTextSchema.parse(value.used ?? ""),
+      reset: PairTextSchema.parse(value.reset ?? ""),
+      windowMinutes: WindowMinutesPairSchema.parse(value.windowMinutes ?? ""),
+    };
+  });
+
 type ToastVariant = "info" | "warning" | "error";
 
 type ToastPayload = {
@@ -75,23 +122,36 @@ export const shouldToastForBackground = (
   return state === "WARN" || state === "CRITICAL" || state === "ERROR";
 };
 
-const splitMetricPair = (raw: string | undefined): [string, string] => {
-  const normalized = raw?.trim() ?? "";
-  if (normalized === "") return ["-", "-"];
+const windowLabelFromMinutes = (minutes: number | undefined, fallback: string): string => {
+  if (!minutes || !Number.isFinite(minutes) || minutes <= 0) return fallback;
 
-  const [left, right] = normalized.split("/", 2);
-  return [left?.trim() || "-", right?.trim() || "-"];
+  const dayMinutes = 24 * 60;
+  if (minutes % dayMinutes === 0) {
+    const days = minutes / dayMinutes;
+    return `${days}d window`;
+  }
+
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return `${hours}h window`;
+  }
+
+  return `${minutes}m window`;
 };
 
 export const messageFromParsed = (parsed: ProbeSnapshot): string => {
-  const state = statusState(parsed.status);
-  if (parsed.error?.trim()) {
-    return `Quota ${state} | ${parsed.error}`;
+  const normalized = NormalizedSnapshotSchema.parse(parsed);
+  const state = statusState(normalized.status);
+  if (normalized.error) {
+    return `Quota ${state} | ${normalized.error}`;
   }
 
-  const [usedHourly, usedWeekly] = splitMetricPair(parsed.used);
-  const [resetHourly, resetWeekly] = splitMetricPair(parsed.reset);
-  return `Quota ${state} | hourly ${usedHourly} (resets ${resetHourly}) | weekly ${usedWeekly} (resets ${resetWeekly})`;
+  const [windowA, windowB] = normalized.windowMinutes;
+  const firstWindowLabel = windowLabelFromMinutes(windowA, "window A");
+  const secondWindowLabel = windowLabelFromMinutes(windowB, "window B");
+  const [usedHourly, usedWeekly] = normalized.used;
+  const [resetHourly, resetWeekly] = normalized.reset;
+  return `Quota ${state}\n${firstWindowLabel} ${usedHourly} (resets ${resetHourly})\n${secondWindowLabel} ${usedWeekly} (resets ${resetWeekly})`;
 };
 
 const errorMessage = (error: unknown): string => {

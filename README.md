@@ -55,8 +55,9 @@ The probe returns one JSON object per run.
 Shape (`ProbeSnapshot`):
 
 - `status` - health label with HTTP context (for example `OK(200)`, `WARN(200)`, `ERROR(auth)`).
-- `used` - quota usage percent pair (`"<hourly>%/<weekly>%"`).
-- `reset` - reset duration pair (`"<hourly>/<weekly>"`, such as `"1h0m/7d0h"`).
+- `used` - quota usage percent pair (`"<windowA>%/<windowB>%"`).
+- `reset` - reset duration pair (`"<windowA>/<windowB>"`, such as `"1h0m/7d0h"`).
+- `windowMinutes` - optional window-size pair from response headers (`"<windowA_minutes>/<windowB_minutes>"`, such as `"300/10080"`).
 - `plan` - plan type header value when present.
 - `profile` - profile/limit name header value when present.
 - `probeTokens` - token usage from SSE `response.completed.usage.total_tokens`.
@@ -71,6 +72,7 @@ Success example:
   "profile": "default",
   "used": "81%/9%",
   "reset": "1h0m/7d0h",
+  "windowMinutes": "300/10080",
   "probeTokens": 10
 }
 ```
@@ -98,7 +100,7 @@ Default behavior:
 
 - background checks: toast only on warn/critical/error states ⚠️
 - explicit quota command trigger: always toast
-- toast text labels the two windows as `hourly` and `weekly`
+- toast text uses dynamic window labels from API headers when available (for example `5h window` and `7d window`) and shows each window on its own line; otherwise it falls back to neutral labels `window A` and `window B`
 
 This keeps normal sessions quiet while still surfacing actionable quota issues.
 

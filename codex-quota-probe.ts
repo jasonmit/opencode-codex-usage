@@ -48,6 +48,7 @@ export type ProbeSnapshot = ProbeResult & {
   plan?: string;
   profile?: string;
   probeTokens?: number;
+  windowMinutes?: string;
   error?: string;
 };
 
@@ -139,9 +140,13 @@ export const probeQuota = async (): Promise<ProbeSnapshot> => {
   const secondaryReset = durationText(
     val(response.headers, "x-codex-secondary-reset-after-seconds", ""),
   );
+  const primaryWindowMinutes = val(response.headers, "x-codex-primary-window-minutes", "");
+  const secondaryWindowMinutes = val(response.headers, "x-codex-secondary-window-minutes", "");
   const plan = val(response.headers, "x-codex-plan-type");
   const profile = val(response.headers, "x-codex-bengalfox-limit-name");
   const probeTokens = usage?.total_tokens ?? 0;
+  const hasWindowMinutes =
+    primaryWindowMinutes.trim() !== "" || secondaryWindowMinutes.trim() !== "";
 
   return {
     status: `${state}(${response.status})`,
@@ -149,6 +154,9 @@ export const probeQuota = async (): Promise<ProbeSnapshot> => {
     profile,
     used: `${primaryUsed}%/${secondaryUsed}%`,
     reset: `${primaryReset}/${secondaryReset}`,
+    ...(hasWindowMinutes
+      ? { windowMinutes: `${primaryWindowMinutes}/${secondaryWindowMinutes}` }
+      : {}),
     probeTokens,
   };
 };
