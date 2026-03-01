@@ -2,7 +2,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parseProbeLine, statusState, type ProbeResult } from "./lib/quota-format.js"
 
-const PROBE_PATH = join(dirname(fileURLToPath(import.meta.url)), "codex_quota_probe.js")
+const PROBE_PATH = join(dirname(fileURLToPath(import.meta.url)), "codex-quota-probe.js")
 const POLL_MS = 10 * 60 * 1000
 const SIGNAL_FILENAME = ".codex-quota-trigger"
 

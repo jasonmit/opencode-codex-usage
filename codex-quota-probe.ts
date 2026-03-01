@@ -1,11 +1,6 @@
 import { readFileSync } from "node:fs"
 import { resolveAuthPath } from "./lib/auth-path.js"
-import {
-  durationText,
-  extractCompletedUsageFromSse,
-  healthLabel,
-  val,
-} from "./lib/quota-format.js"
+import { durationText, extractCompletedUsageFromSse, healthLabel, val } from "./lib/quota-format.js"
 
 type AuthFile = {
   openai?: {

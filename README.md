@@ -16,8 +16,8 @@ This project provides:
 
 ## Repository layout
 
-- `codex_quota_probe.ts` - CLI probe entrypoint.
-- `codex_quota_toast_plugin.ts` - OpenCode TUI toast plugin.
+- `codex-quota-probe.ts` - CLI probe entrypoint.
+- `codex-quota-toast-plugin.ts` - OpenCode TUI toast plugin.
 - `lib/` - shared formatting and path-resolution utilities.
 - `tests/` - unit tests for core parsing/formatting logic.
 - `dist/` - compiled JavaScript output.
@@ -34,13 +34,13 @@ npm run build
 2. Run the probe manually:
 
 ```bash
-node ./dist/codex_quota_probe.js
+node ./dist/codex-quota-probe.js
 ```
 
 3. Reference the built plugin in your OpenCode config (`plugin` array):
 
 ```json
-"/absolute/path/to/opencode-codex-usage/dist/codex_quota_toast_plugin.js"
+"/absolute/path/to/opencode-codex-usage/dist/codex-quota-toast-plugin.js"
 ```
 
 Restart OpenCode after plugin changes.
