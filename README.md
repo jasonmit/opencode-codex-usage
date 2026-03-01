@@ -1,18 +1,18 @@
 # opencode-codex-usage
 
-Lightweight tooling to surface Codex quota status inside OpenCode. 🚦
+Lightweight tooling to surface Codex quota status inside OpenCode.
 
 This project provides:
 
-- a small probe that returns a compact one-line quota summary, and 🔎
-- an OpenCode TUI plugin that turns that status into in-app toast notifications. 🍞
+- a small probe that returns a compact one-line quota summary, and
+- an OpenCode TUI plugin that turns that status into in-app toast notifications.
 
 ## ✨ What this project does
 
-- Shows quota status in a compact format suitable for CLI and logs. 🧾
-- Displays OpenCode TUI toast notifications for quota state. 🔔
-- Supports a low-noise mode where background checks only toast on warning/error states. 🤫
-- Works across Linux, macOS, and Windows. 🖥️
+- Shows quota status in a compact format suitable for CLI and logs.
+- Displays OpenCode TUI toast notifications for quota state.
+- Supports a low-noise mode where background checks only toast on warning/error states.
+- Works across Linux, macOS, and Windows.
 
 ## 🗂️ Repository layout
 
@@ -52,7 +52,7 @@ The plugin checks quota on startup and periodically, then decides whether to sho
 Default behavior:
 
 - background checks: toast only on warn/critical/error states ⚠️
-- explicit quota command trigger: always toast 👆
+- explicit quota command trigger: always toast
 
 This keeps normal sessions quiet while still surfacing actionable quota issues.
 
