@@ -75,15 +75,23 @@ export const shouldToastForBackground = (
   return state === "WARN" || state === "CRITICAL" || state === "ERROR";
 };
 
-const messageFromParsed = (parsed: ProbeSnapshot): string => {
+const splitMetricPair = (raw: string | undefined): [string, string] => {
+  const normalized = raw?.trim() ?? "";
+  if (normalized === "") return ["-", "-"];
+
+  const [left, right] = normalized.split("/", 2);
+  return [left?.trim() || "-", right?.trim() || "-"];
+};
+
+export const messageFromParsed = (parsed: ProbeSnapshot): string => {
   const state = statusState(parsed.status);
   if (parsed.error?.trim()) {
     return `Quota ${state} | ${parsed.error}`;
   }
 
-  const used = parsed.used?.trim() ? parsed.used : "-/-";
-  const reset = parsed.reset?.trim() ? parsed.reset : "-/-";
-  return `Quota ${state} | used ${used} | reset ${reset}`;
+  const [usedHourly, usedWeekly] = splitMetricPair(parsed.used);
+  const [resetHourly, resetWeekly] = splitMetricPair(parsed.reset);
+  return `Quota ${state} | hourly ${usedHourly} (resets ${resetHourly}) | weekly ${usedWeekly} (resets ${resetWeekly})`;
 };
 
 const errorMessage = (error: unknown): string => {
