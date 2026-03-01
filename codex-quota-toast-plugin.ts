@@ -1,8 +1,28 @@
 import { probeQuota, type ProbeSnapshot } from "./codex-quota-probe.js";
 import { statusState } from "./lib/quota-format.js";
+import { z } from "zod";
 
-const POLL_MS = 10 * 60 * 1000;
+const DEFAULT_POLL_MS = 10 * 60 * 1000;
+const POLL_MS_ENV = "OPENCODE_CODEX_QUOTA_POLL_MS";
+const DEFAULT_TOAST_THRESHOLD = "warn";
+const TOAST_THRESHOLD_ENV = "OPENCODE_CODEX_QUOTA_TOAST_THRESHOLD";
 const SIGNAL_FILENAME = ".codex-quota-trigger";
+
+const TOAST_THRESHOLDS = ["warn", "critical", "error", "always", "never"] as const;
+
+export type ToastThreshold = (typeof TOAST_THRESHOLDS)[number];
+
+const PollMsSchema = z
+  .string()
+  .trim()
+  .regex(/^\d+$/)
+  .transform((value) => Number(value))
+  .pipe(z.number().int().positive());
+
+const ToastThresholdSchema = z.preprocess(
+  (value) => (typeof value === "string" ? value.trim().toLowerCase() : value),
+  z.enum(TOAST_THRESHOLDS),
+);
 
 type ToastVariant = "info" | "warning" | "error";
 
@@ -41,8 +61,17 @@ const toastVariantForStatus = (rawStatus: string | undefined): ToastVariant => {
   return "info";
 };
 
-const shouldToastForBackground = (rawStatus: string | undefined): boolean => {
+export const shouldToastForBackground = (
+  rawStatus: string | undefined,
+  threshold: ToastThreshold = DEFAULT_TOAST_THRESHOLD,
+): boolean => {
   const state = statusState(rawStatus);
+
+  if (threshold === "always") return true;
+  if (threshold === "never") return false;
+  if (threshold === "error") return state === "ERROR";
+  if (threshold === "critical") return state === "CRITICAL" || state === "ERROR";
+
   return state === "WARN" || state === "CRITICAL" || state === "ERROR";
 };
 
@@ -61,7 +90,35 @@ const errorMessage = (error: unknown): string => {
   return error instanceof Error ? error.message : String(error);
 };
 
+export const resolvePollMs = (
+  env: NodeJS.ProcessEnv = process.env,
+  fallbackMs = DEFAULT_POLL_MS,
+): number => {
+  const raw = env[POLL_MS_ENV];
+  if (!raw?.trim()) return fallbackMs;
+
+  const parsed = PollMsSchema.safeParse(raw);
+  if (!parsed.success) return fallbackMs;
+
+  return parsed.data;
+};
+
+export const resolveToastThreshold = (
+  env: NodeJS.ProcessEnv = process.env,
+  fallback: ToastThreshold = DEFAULT_TOAST_THRESHOLD,
+): ToastThreshold => {
+  const raw = env[TOAST_THRESHOLD_ENV];
+  if (!raw?.trim()) return fallback;
+
+  const parsed = ToastThresholdSchema.safeParse(raw);
+  if (parsed.success) return parsed.data;
+
+  return fallback;
+};
+
 export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
+  const pollMs = resolvePollMs();
+  const toastThreshold = resolveToastThreshold();
   let running = false;
   let pendingForce = false;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
@@ -86,7 +143,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
 
     try {
       const parsed = await probeQuota();
-      if (!force && !shouldToastForBackground(parsed.status)) {
+      if (!force && !shouldToastForBackground(parsed.status, toastThreshold)) {
         return;
       }
       await client.tui.showToast({
@@ -121,7 +178,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
     if (pollTimer) return;
     pollTimer = setInterval(() => {
       void runProbe();
-    }, POLL_MS);
+    }, pollMs);
   };
 
   const stopPolling = (): void => {

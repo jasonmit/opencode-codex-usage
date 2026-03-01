@@ -120,6 +120,22 @@ Override with:
 OPENCODE_AUTH_PATH=/custom/path/auth.json
 ```
 
+Configure background quota polling interval (milliseconds):
+
+```bash
+OPENCODE_CODEX_QUOTA_POLL_MS=120000
+```
+
+Default is `600000` (10 minutes). Invalid or non-positive values fall back to the default.
+
+Configure background toast threshold:
+
+```bash
+OPENCODE_CODEX_QUOTA_TOAST_THRESHOLD=critical
+```
+
+Allowed values are `warn` (default), `critical`, `error`, `always`, and `never`.
+
 Troubleshooting:
 
 - If you see `status=ERROR(auth)`, your OpenCode auth file is missing or invalid. Bootstrap auth first (for example via `https://github.com/numman-ali/opencode-openai-codex-auth`), then retry.
