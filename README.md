@@ -49,7 +49,7 @@ Restart OpenCode after plugin changes.
 
 ## 📸 Usage screenshot
 
-![Codex quota toast in OpenCode](usage.png)
+![Codex quota toast in OpenCode](screenshot.png)
 
 ## 🧠 Behavior in OpenCode
 
