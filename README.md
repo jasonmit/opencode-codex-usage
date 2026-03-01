@@ -2,6 +2,8 @@
 
 Lightweight tooling to surface Codex quota status inside OpenCode.
 
+This is a personal utility that I open-sourced in case it is useful to others.
+
 This project provides:
 
 - a small probe that returns a compact one-line quota summary, and
@@ -64,11 +66,20 @@ Auth path is auto-detected by OS:
 - macOS: `~/Library/Application Support/opencode/auth.json`
 - Windows: `%LOCALAPPDATA%\\opencode\\auth.json`
 
+Before using this plugin, make sure OpenCode auth has been bootstrapped so that `auth.json` exists.
+If you are using Codex auth setup tooling, a common option is:
+
+- `https://github.com/numman-ali/opencode-openai-codex-auth`
+
 Override with:
 
 ```bash
 OPENCODE_AUTH_PATH=/custom/path/auth.json
 ```
+
+Troubleshooting:
+
+- If you see `status=ERROR(auth)`, your OpenCode auth file is missing or invalid. Bootstrap auth first (for example via `https://github.com/numman-ali/opencode-openai-codex-auth`), then retry.
 
 ## 🛠️ Development
 
