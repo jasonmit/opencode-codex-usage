@@ -1,6 +1,6 @@
 # opencode-codex-usage
 
-Lightweight tooling to surface Codex quota status inside OpenCode.
+Lightweight tooling to surface Codex quota status inside OpenCode so you do not have to keep checking the web usage dashboard.
 
 This is a personal utility that I open-sourced in case it is useful to others.
 
@@ -11,6 +11,7 @@ This project provides:
 
 ## ✨ What this project does
 
+- Replaces routine web usage dashboard checks with in-app quota visibility.
 - Shows quota status in a compact format suitable for CLI and logs.
 - Displays OpenCode TUI toast notifications for quota state.
 - Supports a low-noise mode where background checks only toast on warning/error states.
