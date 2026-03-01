@@ -33,6 +33,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "npm run clean && tsc -p tsconfig.json",
+    "setup": "node ./scripts/setup-opencode-plugin.mjs",
     "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

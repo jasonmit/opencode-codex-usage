@@ -101,11 +101,31 @@ npm install
 npm run build
 ```
 
-Reference the built plugin from your checkout in OpenCode config:
+Auto-configure OpenCode with your local plugin path:
+
+```bash
+npm run setup
+```
+
+This updates `~/.config/opencode/opencode.jsonc` and adds the built plugin path to the `plugin` array.
+
+If you prefer to configure manually, reference the built plugin from your checkout in OpenCode config:
+
+1. Find your repo's absolute path.
+
+```bash
+pwd
+```
+
+2. Add the built plugin file to your OpenCode config `plugin` array.
 
 ```json
-"/absolute/path/to/opencode-codex-usage/dist/codex-quota-toast-plugin.js"
+{
+  "plugin": ["/absolute/path/to/opencode-codex-usage/dist/codex-quota-toast-plugin.js"]
+}
 ```
+
+3. Replace `/absolute/path/to/opencode-codex-usage` with your real path from `pwd`, then restart OpenCode.
 
 ## 📝 Notes
 
