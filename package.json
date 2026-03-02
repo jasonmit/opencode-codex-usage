@@ -1,0 +1,52 @@
+{
+  "name": "opencode-codex-usage",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Codex quota probe and OpenCode toast plugin",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jasonmit/opencode-codex-usage.git"
+  },
+  "homepage": "https://github.com/jasonmit/opencode-codex-usage#readme",
+  "bugs": {
+    "url": "https://github.com/jasonmit/opencode-codex-usage/issues"
+  },
+  "keywords": [
+    "opencode",
+    "codex",
+    "plugin",
+    "quota",
+    "tui"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "opencode-codex-usage": "dist/bin/opencode-codex-usage.js"
+  },
+  "files": [
+    "dist/bin/**/*.js",
+    "dist/index.js",
+    "dist/lib/**/*.js",
+    "README.md"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "npm run clean && tsc -p tsconfig.json && chmod +x dist/bin/opencode-codex-usage.js",
+    "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepack": "npm run build",
+    "pack:dry": "npm pack --dry-run",
+    "pack": "npm pack"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "prettier": "^3.6.2",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  }
+}
