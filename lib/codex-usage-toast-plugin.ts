@@ -164,6 +164,11 @@ type PluginContext = {
   worktree: string;
 };
 
+type ProbeRunResult = {
+  failed: boolean;
+  detail?: string;
+};
+
 export const isCodexUsageCommand = (name: string | undefined): boolean => {
   return name === "/codex-usage" || name === "codex-usage";
 };
@@ -370,7 +375,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
   };
 
   const triggerStartupProbe = (): void => {
-    runProbeSafely({ force: forceStartupToast });
+    runProbeSafely({ force: forceStartupToast, showFailureToast: false });
   };
 
   const isSignalFile = (filePath: string | undefined): boolean => {
@@ -382,18 +387,37 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
     );
   };
 
-  const runProbe = async ({ force = false }: { force?: boolean } = {}): Promise<void> => {
+  const runProbe = async ({
+    force = false,
+    showFailureToast = false,
+  }: { force?: boolean; showFailureToast?: boolean } = {}): Promise<ProbeRunResult> => {
     if (running) {
       if (force) pendingForce = true;
-      return;
+      return { failed: false };
     }
 
     running = true;
 
     try {
       const parsed = await probeQuota();
+      const probeError = parsed.error?.trim();
+      if (probeError) {
+        await logPluginError("quota probe failed", { detail: probeError, worktree });
+        if (showFailureToast) {
+          await client.tui.showToast({
+            body: {
+              title: "Codex quota 🚨",
+              message: `🚨 Quota error | ${probeError}`,
+              variant: "error",
+              duration: toastDurationMs,
+            },
+          });
+        }
+        return { failed: true, detail: probeError };
+      }
+
       if (!force && !shouldToastForBackground(parsed.status, toastThreshold)) {
-        return;
+        return { failed: false };
       }
       await client.tui.showToast({
         body: {
@@ -403,29 +427,36 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
           duration: toastDurationMs,
         },
       });
+      return { failed: false };
     } catch (error: unknown) {
       const detail = error instanceof Error ? error.message : String(error);
       await logPluginError("quota probe failed", { detail, worktree });
-      await client.tui.showToast({
-        body: {
-          title: "Codex quota 🚨",
-          message: `🚨 Quota error | ${detail}`,
-          variant: "error",
-          duration: toastDurationMs,
-        },
-      });
+      if (showFailureToast) {
+        await client.tui.showToast({
+          body: {
+            title: "Codex quota 🚨",
+            message: `🚨 Quota error | ${detail}`,
+            variant: "error",
+            duration: toastDurationMs,
+          },
+        });
+      }
+      return { failed: true, detail };
     } finally {
       running = false;
 
       if (pendingForce) {
         pendingForce = false;
-        void runProbe({ force: true });
+        void runProbe({ force: true, showFailureToast: false });
       }
     }
   };
 
-  const runProbeSafely = ({ force = false }: { force?: boolean } = {}): void => {
-    runProbe({ force }).catch((error: unknown) => {
+  const runProbeSafely = ({
+    force = false,
+    showFailureToast = false,
+  }: { force?: boolean; showFailureToast?: boolean } = {}): void => {
+    runProbe({ force, showFailureToast }).catch((error: unknown) => {
       reportAsyncFailure("runProbe", error);
     });
   };
@@ -451,7 +482,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
       const revision = readSignalRevision();
       if (revision <= signalRevision) return;
       signalRevision = revision;
-      runProbeSafely({ force: true });
+      runProbeSafely({ force: true, showFailureToast: false });
     }, SIGNAL_WATCH_MS);
   };
 
@@ -464,7 +495,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
   const startPolling = (): void => {
     if (pollTimer) return;
     pollTimer = setInterval(() => {
-      runProbeSafely();
+      runProbeSafely({ showFailureToast: false });
     }, pollMs);
   };
 
@@ -523,7 +554,10 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
     "command.execute.before": async (input: { command: string }): Promise<void> => {
       if (!isCodexUsageCommand(input.command)) return;
 
-      await runProbe({ force: true });
+      const result = await runProbe({ force: true, showFailureToast: true });
+      if (result.failed) {
+        throw new Error(`opencode-codex-usage: ${result.detail ?? "quota probe failed"}`);
+      }
       throw new Error("opencode-codex-usage:handled");
     },
     event: ({ event }: { event: PluginEvent }) => {
@@ -546,7 +580,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
         isCommandExecutedEvent(event.type) &&
         isCodexUsageCommand(stringFromUnknown(event.properties?.name))
       ) {
-        runProbeSafely({ force: true });
+        runProbeSafely({ force: true, showFailureToast: true });
         return;
       }
 
@@ -556,7 +590,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
           stringFromUnknown(event.properties?.file) ?? stringFromUnknown(event.properties?.path),
         )
       ) {
-        runProbeSafely({ force: true });
+        runProbeSafely({ force: true, showFailureToast: false });
       }
     },
     dispose: () => {
