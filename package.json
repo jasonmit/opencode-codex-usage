@@ -1,7 +1,6 @@
 {
   "name": "opencode-codex-usage",
   "version": "0.1.0",
-  "private": true,
   "description": "Codex quota probe and OpenCode toast plugin",
   "license": "MIT",
   "repository": {

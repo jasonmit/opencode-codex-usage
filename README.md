@@ -13,6 +13,25 @@ Instead of checking the web dashboard, you get quota toasts directly in OpenCode
 
 ## Quick start
 
+### Option A: install from npm (recommended)
+
+```bash
+npm install -g opencode-codex-usage
+opencode-codex-usage --setup
+```
+
+Then restart OpenCode.
+
+### Option B: run with npx (no global install)
+
+```bash
+npx opencode-codex-usage --setup
+```
+
+Then restart OpenCode.
+
+### Option C: local repo (development)
+
 1. Build:
 
 ```bash
@@ -65,7 +84,13 @@ Flags for `opencode-codex-usage`:
 - `--config <path>` - with `--setup`, use a non-default OpenCode config path.
 - On error, JSON is written to stderr and the process exits non-zero.
 
-Remove link:
+Remove global install:
+
+```bash
+npm uninstall -g opencode-codex-usage
+```
+
+Remove local link:
 
 ```bash
 npm unlink -g opencode-codex-usage
