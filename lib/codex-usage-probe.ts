@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { resolveAuthPath } from "./auth-path.js";
 import { durationText, extractCompletedUsageFromSse, healthLabel, val } from "./quota-format.js";
@@ -197,7 +197,7 @@ export const probeQuota = async (): Promise<ProbeSnapshot> => {
 
   try {
     const authPath = resolveAuthPath();
-    const authRaw = readFileSync(authPath, "utf8");
+    const authRaw = await readFile(authPath, "utf8");
     const auth = parseAuthFile(authRaw);
     access = auth.openai?.access ?? "";
     accountId = auth.openai?.accountId ?? "";
@@ -218,10 +218,7 @@ export const probeQuota = async (): Promise<ProbeSnapshot> => {
     stream: true,
   };
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => {
-    controller.abort();
-  }, REQUEST_TIMEOUT_MS);
+  const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 
   let response: Response;
   let responseText = "";
@@ -238,19 +235,17 @@ export const probeQuota = async (): Promise<ProbeSnapshot> => {
         "chatgpt-account-id": accountId,
       },
       body: JSON.stringify(body),
-      signal: controller.signal,
+      signal: timeoutSignal,
     });
 
     responseText = await response.text();
   } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
+    if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
       return toProbeError("error", `request timed out after ${REQUEST_TIMEOUT_MS}ms`, "timeout");
     }
 
     const detail = errorMessage(error);
     return toProbeError("error", detail.slice(0, 120), "network");
-  } finally {
-    clearTimeout(timeout);
   }
 
   if (!response.ok) {

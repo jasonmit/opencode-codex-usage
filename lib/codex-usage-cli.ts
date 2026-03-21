@@ -1,12 +1,4 @@
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -125,45 +117,64 @@ const pluginPathFromModule = (): string => {
   return path.resolve(moduleDir, "..", "index.js");
 };
 
-const writeSignalFileSafely = (signalPath: string, stamp: string): void => {
-  if (existsSync(signalPath) && lstatSync(signalPath).isSymbolicLink()) {
+const isNotFoundError = (error: unknown): boolean => {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+};
+
+const lstatIfExists = async (
+  targetPath: string,
+): Promise<Awaited<ReturnType<typeof lstat>> | undefined> => {
+  try {
+    return await lstat(targetPath);
+  } catch (error: unknown) {
+    if (isNotFoundError(error)) return undefined;
+    throw error;
+  }
+};
+
+const writeSignalFileSafely = async (signalPath: string, stamp: string): Promise<void> => {
+  const signalStat = await lstatIfExists(signalPath);
+
+  if (signalStat?.isSymbolicLink()) {
     throw new Error(`refusing to write trigger file through symlink: ${signalPath}`);
   }
 
   const tempPath = `${signalPath}.${process.pid}.${Date.now()}.tmp`;
   try {
-    writeFileSync(tempPath, stamp, { encoding: "utf8", mode: 0o600 });
-    renameSync(tempPath, signalPath);
+    await writeFile(tempPath, stamp, { encoding: "utf8", mode: 0o600 });
+    await rename(tempPath, signalPath);
   } finally {
-    if (existsSync(tempPath)) {
-      rmSync(tempPath);
-    }
+    await rm(tempPath, { force: true });
   }
 };
 
-const runSetup = (configPath: string): void => {
+const runSetup = async (configPath: string): Promise<void> => {
   const pluginPath = pluginPathFromModule();
-  if (!existsSync(pluginPath)) {
+  const pluginStat = await lstatIfExists(pluginPath);
+
+  if (!pluginStat) {
     throw new Error(
       `built plugin not found at ${pluginPath}; run \"npm run build\" first, then rerun opencode-codex-usage --setup`,
     );
   }
 
   const pluginPathLiteral = JSON.stringify(pluginPath);
-  mkdirSync(path.dirname(configPath), { recursive: true });
+  await mkdir(path.dirname(configPath), { recursive: true });
 
-  if (!existsSync(configPath)) {
+  const configStat = await lstatIfExists(configPath);
+
+  if (!configStat) {
     const freshConfig = `{
   "plugin": [
     ${pluginPathLiteral}
   ]
 }\n`;
-    writeFileSync(configPath, freshConfig, "utf8");
+    await writeFile(configPath, freshConfig, "utf8");
     process.stdout.write(`Created ${configPath} with plugin path.\n`);
     return;
   }
 
-  const content = readFileSync(configPath, "utf8");
+  const content = await readFile(configPath, "utf8");
   let nextContent = content;
   let updated = false;
 
@@ -187,7 +198,7 @@ const runSetup = (configPath: string): void => {
     return;
   }
 
-  writeFileSync(configPath, nextContent, "utf8");
+  await writeFile(configPath, nextContent, "utf8");
   process.stdout.write(`Updated ${configPath} with plugin path.\n`);
 };
 
@@ -266,7 +277,7 @@ export const runCli = async (argv: string[] = process.argv.slice(2)): Promise<vo
     const configPath = options.setupConfigPath
       ? path.resolve(options.setupConfigPath)
       : defaultConfigPath;
-    runSetup(configPath);
+    await runSetup(configPath);
     return;
   }
 
@@ -290,7 +301,7 @@ export const runCli = async (argv: string[] = process.argv.slice(2)): Promise<vo
 
   const signalPath = resolveSignalPath();
   const stamp = `${Date.now()}\n`;
-  writeSignalFileSafely(signalPath, stamp);
+  await writeSignalFileSafely(signalPath, stamp);
 };
 
 export const runCliSafely = async (argv: string[] = process.argv.slice(2)): Promise<void> => {

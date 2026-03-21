@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import path from "node:path";
 import { probeQuota, type ProbeSnapshot } from "./codex-usage-probe.js";
 import { statusState } from "./quota-format.js";
@@ -462,10 +462,8 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
   };
 
   const signalMtime = (filePath: string): number => {
-    if (!existsSync(filePath)) return 0;
-
     try {
-      return statSync(filePath).mtimeMs;
+      return statSync(filePath, { throwIfNoEntry: false })?.mtimeMs ?? 0;
     } catch {
       return 0;
     }
@@ -558,6 +556,8 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
       if (result.failed) {
         throw new Error(`opencode-codex-usage: ${result.detail ?? "quota probe failed"}`);
       }
+      // We intentionally throw here to stop OpenCode's default command handling.
+      // The plugin has already handled /codex-usage (toast shown), so no further execution should occur.
       throw new Error("opencode-codex-usage:handled");
     },
     event: ({ event }: { event: PluginEvent }) => {
