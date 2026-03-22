@@ -6,7 +6,7 @@ Instead of checking the web dashboard, you get quota toasts directly in OpenCode
 
 ## Screenshot
 
-<img src="screenshot.png?cache=20260301" alt="Codex quota toast in OpenCode" width="80%" />
+<img src="screen.png" alt="Codex quota toast in OpenCode" width="80%" />
 
 ## What it does
 
