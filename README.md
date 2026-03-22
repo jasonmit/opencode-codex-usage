@@ -4,6 +4,10 @@ Small OpenCode plugin for Codex quota visibility.
 
 Instead of checking the web dashboard, you get quota toasts directly in OpenCode.
 
+## Screenshot
+
+<img src="screenshot.png?cache=20260301" alt="Codex quota toast in OpenCode" width="80%" />
+
 ## What it does
 
 - Shows Codex quota status as OpenCode toasts.
@@ -53,10 +57,6 @@ Manual plugin path (if you prefer editing config directly):
 ```json
 "<repo>/dist/index.js"
 ```
-
-## Screenshot
-
-<img src="screenshot.png?cache=20260301" alt="Codex quota toast in OpenCode" width="80%" />
 
 ## CLI commands
 
