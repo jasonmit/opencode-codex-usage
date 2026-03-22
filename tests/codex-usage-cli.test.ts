@@ -8,6 +8,7 @@ test("parseCliOptions uses silent-json defaults", () => {
     noNotify: false,
     pretty: false,
     printJson: false,
+    retryCount: undefined,
     setup: false,
     setupConfigPath: undefined,
   });
@@ -19,6 +20,7 @@ test("parseCliOptions recognizes output and notify flags", () => {
     noNotify: true,
     pretty: false,
     printJson: true,
+    retryCount: undefined,
     setup: false,
     setupConfigPath: undefined,
   });
@@ -27,6 +29,7 @@ test("parseCliOptions recognizes output and notify flags", () => {
     noNotify: false,
     pretty: false,
     printJson: true,
+    retryCount: undefined,
     setup: false,
     setupConfigPath: undefined,
   });
@@ -38,6 +41,7 @@ test("parseCliOptions recognizes pretty output flag", () => {
     noNotify: false,
     pretty: true,
     printJson: true,
+    retryCount: undefined,
     setup: false,
     setupConfigPath: undefined,
   });
@@ -49,6 +53,7 @@ test("parseCliOptions recognizes setup flag", () => {
     noNotify: false,
     pretty: false,
     printJson: false,
+    retryCount: undefined,
     setup: true,
     setupConfigPath: undefined,
   });
@@ -72,4 +77,15 @@ test("parseCliOptions accepts setup config path", () => {
 
 test("parseCliOptions rejects missing config value", () => {
   assert.throws(() => parseCliOptions(["--config"]), /requires a value/);
+});
+
+test("parseCliOptions accepts retry count", () => {
+  assert.equal(parseCliOptions(["--retry", "2"]).retryCount, 2);
+  assert.equal(parseCliOptions(["--retry=0"]).retryCount, 0);
+});
+
+test("parseCliOptions rejects invalid retry count", () => {
+  assert.throws(() => parseCliOptions(["--retry"]), /requires a value/);
+  assert.throws(() => parseCliOptions(["--retry", "abc"]), /integer between 0 and 2/);
+  assert.throws(() => parseCliOptions(["--retry", "9"]), /between 0 and 2/);
 });

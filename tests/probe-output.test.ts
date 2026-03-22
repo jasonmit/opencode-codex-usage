@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatProbeOutput } from "../lib/codex-usage-probe.js";
+import {
+  formatProbeOutput,
+  normalizeResetValue,
+  normalizeUsagePercent,
+  resolveProbeRetryCount,
+} from "../lib/codex-usage-probe.js";
 
 test("formatProbeOutput returns compact JSON by default", () => {
   const line = formatProbeOutput({ status: "ok", statusCode: 200 });
@@ -86,4 +91,28 @@ test("formatProbeOutput aligns values for metadata rows", () => {
   const planValueStart = lines[2]?.indexOf("plus / default") ?? -1;
   assert.equal(quotaValueStart, statusValueStart);
   assert.equal(statusValueStart, planValueStart);
+});
+
+test("normalizeUsagePercent handles decimal and bounded inputs", () => {
+  assert.equal(normalizeUsagePercent("0.81"), 81);
+  assert.equal(normalizeUsagePercent("81"), 81);
+  assert.equal(normalizeUsagePercent("101"), 100);
+  assert.equal(normalizeUsagePercent("-5"), 0);
+  assert.equal(normalizeUsagePercent("nope"), null);
+});
+
+test("normalizeResetValue accepts durations and timestamps", () => {
+  const nowMs = Date.UTC(2026, 0, 1, 0, 0, 0);
+  assert.equal(normalizeResetValue("3600", nowMs), "1h0m");
+  assert.equal(normalizeResetValue(String(Math.floor(nowMs / 1000) + 3600), nowMs), "1h0m");
+  assert.equal(normalizeResetValue(String(nowMs + 3_600_000), nowMs), "1h0m");
+  assert.equal(normalizeResetValue("", nowMs), null);
+});
+
+test("resolveProbeRetryCount parses env and bounds values", () => {
+  assert.equal(resolveProbeRetryCount({}), 1);
+  assert.equal(resolveProbeRetryCount({ OPENCODE_CODEX_QUOTA_RETRY_COUNT: "2" }), 2);
+  assert.equal(resolveProbeRetryCount({ OPENCODE_CODEX_QUOTA_RETRY_COUNT: "9" }), 2);
+  assert.equal(resolveProbeRetryCount({ OPENCODE_CODEX_QUOTA_RETRY_COUNT: "-1" }), 1);
+  assert.equal(resolveProbeRetryCount({ OPENCODE_CODEX_QUOTA_RETRY_COUNT: "abc" }), 1);
 });

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   resolveToastThreshold,
   shouldToastForBackground,
+  shouldToastForBackgroundTransition,
   type ToastThreshold,
 } from "../lib/codex-usage-toast-plugin.js";
 
@@ -40,4 +41,14 @@ test("filters background toasts by threshold", () => {
   for (const check of checks) {
     assert.equal(shouldToastForBackground(check.status, check.threshold), check.expected);
   }
+});
+
+test("background transition toasts only on worsening status", () => {
+  assert.equal(shouldToastForBackgroundTransition("warn", undefined), true);
+  assert.equal(shouldToastForBackgroundTransition("warn", "ok"), true);
+  assert.equal(shouldToastForBackgroundTransition("critical", "warn"), true);
+  assert.equal(shouldToastForBackgroundTransition("error", "critical"), true);
+  assert.equal(shouldToastForBackgroundTransition("warn", "warn"), false);
+  assert.equal(shouldToastForBackgroundTransition("ok", "warn"), false);
+  assert.equal(shouldToastForBackgroundTransition("warn", "critical"), false);
 });

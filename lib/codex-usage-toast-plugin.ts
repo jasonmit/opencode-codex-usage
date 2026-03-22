@@ -254,6 +254,16 @@ export const shouldToastForBackground = (
   return STATUS_SEVERITY_RANK[state] >= thresholdRank;
 };
 
+export const shouldToastForBackgroundTransition = (
+  currentStatus: string | undefined,
+  previousStatus: string | undefined,
+): boolean => {
+  const current = statusStateNormalized(currentStatus);
+  const previous = previousStatus ? statusStateNormalized(previousStatus) : undefined;
+  if (!previous) return true;
+  return STATUS_SEVERITY_RANK[current] > STATUS_SEVERITY_RANK[previous];
+};
+
 const windowLabelFromMinutes = (minutes: number | undefined, fallback: string): string => {
   if (!minutes || !Number.isFinite(minutes) || minutes <= 0) return fallback;
 
@@ -345,6 +355,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
   let running = false;
   let pendingForce = false;
   let started = false;
+  let lastBackgroundStatus: QuotaStatusState | undefined;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
   let triggerTimer: ReturnType<typeof setInterval> | undefined;
   const signalPath = resolveSignalPath();
@@ -416,9 +427,21 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
         return { failed: true, detail: probeError };
       }
 
-      if (!force && !shouldToastForBackground(parsed.status, toastThreshold)) {
-        return { failed: false };
+      const normalizedStatus = statusStateNormalized(parsed.status);
+      if (!force) {
+        const shouldToastByThreshold = shouldToastForBackground(parsed.status, toastThreshold);
+        const shouldToastByTransition = shouldToastForBackgroundTransition(
+          normalizedStatus,
+          lastBackgroundStatus,
+        );
+        lastBackgroundStatus = normalizedStatus;
+        if (!shouldToastByThreshold || !shouldToastByTransition) {
+          return { failed: false };
+        }
+      } else {
+        lastBackgroundStatus = normalizedStatus;
       }
+
       await client.tui.showToast({
         body: {
           title: toastTitleForStatus(parsed.status),
@@ -528,6 +551,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
 
   const stopBackgroundWorkersAndReset = (): void => {
     started = false;
+    lastBackgroundStatus = undefined;
     stopBackgroundWorkers();
   };
 
