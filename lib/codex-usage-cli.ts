@@ -11,6 +11,7 @@ export type CliOptions = {
   noNotify: boolean;
   pretty: boolean;
   printJson: boolean;
+  retryCount?: number;
   setup: boolean;
   setupConfigPath?: string;
 };
@@ -25,6 +26,7 @@ const helpText = () => {
     "  --verbose         Alias for --json",
     "  --pretty          Show human-friendly quota output",
     "  --no-notify       Skip writing trigger signal file",
+    "  --retry <count>   Retry transient probe failures (0-2)",
     "  --setup           Add plugin path to OpenCode config",
     "  --config <path>   Config file path to use with --setup",
     "",
@@ -210,11 +212,24 @@ const wantsJsonOutput = (argv: string[]): boolean => {
   return argv.some((arg) => arg === "--json" || arg === "--verbose");
 };
 
+const parseRetryCount = (raw: string): number => {
+  const normalized = raw.trim();
+  if (!/^\d+$/.test(normalized)) {
+    throw new Error("--retry requires an integer between 0 and 2");
+  }
+  const parsed = Number.parseInt(normalized, 10);
+  if (parsed < 0 || parsed > 2) {
+    throw new Error("--retry requires a value between 0 and 2");
+  }
+  return parsed;
+};
+
 export const parseCliOptions = (argv: string[]): CliOptions => {
   let help = false;
   let noNotify = false;
   let pretty = false;
   let printJson = false;
+  let retryCount: number | undefined;
   let setup = false;
   let setupConfigPath: string | undefined;
 
@@ -246,6 +261,21 @@ export const parseCliOptions = (argv: string[]): CliOptions => {
       continue;
     }
 
+    if (arg === "--retry") {
+      const rawValue = argv[idx + 1];
+      if (!rawValue || rawValue.startsWith("--")) {
+        throw new Error("--retry requires a value");
+      }
+      retryCount = parseRetryCount(rawValue);
+      idx += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--retry=")) {
+      retryCount = parseRetryCount(arg.slice("--retry=".length));
+      continue;
+    }
+
     if (arg === "--config") {
       const rawValue = argv[idx + 1];
       if (!rawValue || rawValue.startsWith("--")) {
@@ -262,7 +292,7 @@ export const parseCliOptions = (argv: string[]): CliOptions => {
     }
   }
 
-  return { help, noNotify, pretty, printJson, setup, setupConfigPath };
+  return { help, noNotify, pretty, printJson, retryCount, setup, setupConfigPath };
 };
 
 export const runCli = async (argv: string[] = process.argv.slice(2)): Promise<void> => {
@@ -281,7 +311,7 @@ export const runCli = async (argv: string[] = process.argv.slice(2)): Promise<vo
     return;
   }
 
-  const snapshot = await probeQuota();
+  const snapshot = await probeQuota({ retryCount: options.retryCount });
   const state = statusState(snapshot.status);
   const hasError = state === "error";
   const line = formatProbeOutput(snapshot, {

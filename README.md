@@ -80,6 +80,7 @@ Flags for `opencode-codex-usage`:
 - `--json` or `--verbose` - print JSON snapshot to stdout on success.
 - `--pretty` - show a human-friendly quota view with ASCII usage bars.
 - `--no-notify` - skip the refresh notification step.
+- `--retry <count>` - retry transient probe failures (`0-2`). Overrides env for current run.
 - `--setup` - update OpenCode config with plugin path only.
 - `--config <path>` - with `--setup`, use a non-default OpenCode config path.
 - On error, JSON is written to stderr and the process exits non-zero.
@@ -99,7 +100,7 @@ npm unlink -g opencode-codex-usage
 ## Behavior
 
 - Background checks run on startup and on interval.
-- Background checks trigger a toast only when status meets the configured threshold.
+- Background checks trigger a toast only when status meets the configured threshold and gets worse than the previous background state.
 - Manual runs can trigger an immediate refresh from any folder.
 - Window labels use API-provided window minutes when available (for example `5h window`, `7d window`), otherwise fallback to `window A` / `window B`.
 
@@ -124,6 +125,14 @@ OPENCODE_CODEX_QUOTA_POLL_MS=120000
 ```
 
 Default is `600000` (10 minutes). Invalid or non-positive values fall back to default.
+
+Set transient retry count for probe failures:
+
+```bash
+OPENCODE_CODEX_QUOTA_RETRY_COUNT=1
+```
+
+Allowed values: `0`, `1` (default), `2`. Values above `2` clamp to `2`; invalid values fall back to default.
 
 Advanced: override the internal refresh path (optional):
 
@@ -159,6 +168,13 @@ Common keys:
 - `reset` (`primary`/`secondary` reset duration)
 - `windowMinutes` (`primary`/`secondary` window length in minutes, when available)
 - `plan`, `profile`, `probeTokens`, `error`
+
+Error `statusCode` values:
+
+- `auth` for auth-path/token issues
+- `network` for transport failures
+- `timeout` for request timeout
+- numeric HTTP status codes for server responses
 
 Example:
 

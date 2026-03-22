@@ -1,7 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { resolveAuthPath } from "./auth-path.js";
-import { durationText, extractCompletedUsageFromSse, healthLabel, val } from "./quota-format.js";
+import {
+  durationText,
+  extractCompletedUsageFromSse,
+  healthLabel,
+  statusState,
+  val,
+} from "./quota-format.js";
 
 type AuthFile = {
   openai?: {
@@ -35,6 +41,8 @@ const errorMessage = (error: unknown): string => {
 
 const CODEX_URL = "https://chatgpt.com/backend-api/codex/responses";
 const REQUEST_TIMEOUT_MS = 15_000;
+const RETRY_COUNT_ENV = "OPENCODE_CODEX_QUOTA_RETRY_COUNT";
+const MAX_RETRY_COUNT = 2;
 
 type WindowPair<T> = {
   primary: T;
@@ -51,6 +59,17 @@ export type ProbeSnapshot = {
   profile?: string;
   probeTokens?: number;
   error?: string;
+};
+
+export type ProbeQuotaOptions = {
+  retryCount?: number;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+  env?: NodeJS.ProcessEnv;
+  credentials?: {
+    accessToken: string;
+    accountId?: string;
+  };
 };
 
 const toProbeError = (
@@ -70,9 +89,67 @@ const parseOptionalInt = (raw: string): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const parseOptionalDuration = (secondsRaw: string): string | null => {
-  const value = durationText(secondsRaw);
+export const normalizeUsagePercent = (raw: string): number | null => {
+  const parsed = Number.parseFloat(raw.trim());
+  if (!Number.isFinite(parsed)) return null;
+
+  const normalized = parsed >= 0 && parsed <= 1 ? parsed * 100 : parsed;
+  const bounded = Math.max(0, Math.min(100, normalized));
+  return Math.round(bounded);
+};
+
+export const normalizeResetValue = (raw: string, nowMs = Date.now()): string | null => {
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+
+  const parsed = Number.parseFloat(trimmed);
+  if (!Number.isFinite(parsed)) {
+    const fallback = durationText(trimmed);
+    return fallback === "-" ? null : fallback;
+  }
+
+  let secondsRemaining = parsed;
+  if (parsed > 1_000_000_000_000) {
+    secondsRemaining = (parsed - nowMs) / 1000;
+  } else if (parsed > 1_000_000_000) {
+    secondsRemaining = parsed - nowMs / 1000;
+  }
+
+  const value = durationText(String(Math.max(0, Math.floor(secondsRemaining))));
   return value === "-" ? null : value;
+};
+
+const parseOptionalDuration = (secondsRaw: string, nowMs: number): string | null => {
+  return normalizeResetValue(secondsRaw, nowMs);
+};
+
+const parseRetryCount = (raw: string | undefined, fallback = 1): number => {
+  const parsed = Number.parseInt((raw ?? "").trim(), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return Math.min(parsed, MAX_RETRY_COUNT);
+};
+
+export const resolveProbeRetryCount = (
+  env: NodeJS.ProcessEnv = process.env,
+  fallback = 1,
+): number => {
+  return parseRetryCount(env[RETRY_COUNT_ENV], fallback);
+};
+
+const shouldRetryStatusCode = (statusCode: number | string | undefined): boolean => {
+  if (statusCode === "network" || statusCode === "timeout") return true;
+  if (typeof statusCode === "number") {
+    if (statusCode >= 500) return true;
+    if (statusCode === 408 || statusCode === 409 || statusCode === 425 || statusCode === 429) {
+      return true;
+    }
+  }
+  return false;
+};
+
+export const isRetryableProbeFailure = (snapshot: ProbeSnapshot): boolean => {
+  if (statusState(snapshot.status) !== "error") return false;
+  return shouldRetryStatusCode(snapshot.statusCode);
 };
 
 const percentText = (value: number | null | undefined): string => {
@@ -191,7 +268,17 @@ export const formatProbeOutput = (
   return JSON.stringify(snapshot, null, options.printJson ? 2 : 0);
 };
 
-export const probeQuota = async (): Promise<ProbeSnapshot> => {
+const loadCredentials = async (
+  options: ProbeQuotaOptions,
+): Promise<{ access: string; accountId: string } | ProbeSnapshot> => {
+  if (options.credentials) {
+    const access = options.credentials.accessToken.trim();
+    if (access === "") {
+      return toProbeError("error", "missing access token", "auth");
+    }
+    return { access, accountId: options.credentials.accountId ?? "" };
+  }
+
   let access = "";
   let accountId = "";
 
@@ -210,6 +297,18 @@ export const probeQuota = async (): Promise<ProbeSnapshot> => {
     return toProbeError("error", detail.slice(0, 120), "auth");
   }
 
+  return { access, accountId };
+};
+
+const runProbeAttempt = async (
+  access: string,
+  accountId: string,
+  options: {
+    timeoutMs: number;
+    fetchImpl: typeof fetch;
+    nowMs: number;
+  },
+): Promise<ProbeSnapshot> => {
   const body = {
     model: "gpt-5.1-codex",
     instructions: "You are a coding assistant.",
@@ -218,13 +317,13 @@ export const probeQuota = async (): Promise<ProbeSnapshot> => {
     stream: true,
   };
 
-  const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  const timeoutSignal = AbortSignal.timeout(options.timeoutMs);
 
   let response: Response;
   let responseText = "";
 
   try {
-    response = await fetch(CODEX_URL, {
+    response = await options.fetchImpl(CODEX_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${access}`,
@@ -241,7 +340,7 @@ export const probeQuota = async (): Promise<ProbeSnapshot> => {
     responseText = await response.text();
   } catch (error) {
     if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
-      return toProbeError("error", `request timed out after ${REQUEST_TIMEOUT_MS}ms`, "timeout");
+      return toProbeError("error", `request timed out after ${options.timeoutMs}ms`, "timeout");
     }
 
     const detail = errorMessage(error);
@@ -256,7 +355,6 @@ export const probeQuota = async (): Promise<ProbeSnapshot> => {
   const usage = extractCompletedUsageFromSse(responseText);
   const primaryUsedRaw = val(response.headers, "x-codex-primary-used-percent", "");
   const secondaryUsedRaw = val(response.headers, "x-codex-secondary-used-percent", "");
-  const state = healthLabel(primaryUsedRaw, secondaryUsedRaw);
   const primaryResetSeconds = val(response.headers, "x-codex-primary-reset-after-seconds", "");
   const secondaryResetSeconds = val(response.headers, "x-codex-secondary-reset-after-seconds", "");
   const primaryWindowMinutesRaw = val(response.headers, "x-codex-primary-window-minutes", "");
@@ -264,13 +362,18 @@ export const probeQuota = async (): Promise<ProbeSnapshot> => {
   const plan = val(response.headers, "x-codex-plan-type");
   const profile = val(response.headers, "x-codex-bengalfox-limit-name");
   const probeTokens = usage?.total_tokens ?? 0;
-  const primaryUsed = parseOptionalInt(primaryUsedRaw);
-  const secondaryUsed = parseOptionalInt(secondaryUsedRaw);
-  const primaryReset = parseOptionalDuration(primaryResetSeconds);
-  const secondaryReset = parseOptionalDuration(secondaryResetSeconds);
+  const primaryUsed = normalizeUsagePercent(primaryUsedRaw) ?? parseOptionalInt(primaryUsedRaw);
+  const secondaryUsed =
+    normalizeUsagePercent(secondaryUsedRaw) ?? parseOptionalInt(secondaryUsedRaw);
+  const primaryReset = parseOptionalDuration(primaryResetSeconds, options.nowMs);
+  const secondaryReset = parseOptionalDuration(secondaryResetSeconds, options.nowMs);
   const primaryWindowMinutes = parseOptionalInt(primaryWindowMinutesRaw);
   const secondaryWindowMinutes = parseOptionalInt(secondaryWindowMinutesRaw);
   const hasWindowMinutes = primaryWindowMinutes !== null || secondaryWindowMinutes !== null;
+  const state =
+    primaryUsed !== null && secondaryUsed !== null
+      ? healthLabel(String(primaryUsed), String(secondaryUsed))
+      : healthLabel(primaryUsedRaw, secondaryUsedRaw);
 
   return {
     status: state,
@@ -284,6 +387,38 @@ export const probeQuota = async (): Promise<ProbeSnapshot> => {
       : {}),
     probeTokens,
   };
+};
+
+export const probeQuota = async (options: ProbeQuotaOptions = {}): Promise<ProbeSnapshot> => {
+  const retryCount = Math.min(
+    options.retryCount ?? resolveProbeRetryCount(options.env),
+    MAX_RETRY_COUNT,
+  );
+  const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const nowMs = Date.now();
+
+  const credentials = await loadCredentials(options);
+  if ("status" in credentials) {
+    return credentials;
+  }
+
+  let snapshot = await runProbeAttempt(credentials.access, credentials.accountId, {
+    timeoutMs,
+    fetchImpl,
+    nowMs,
+  });
+
+  for (let attempt = 0; attempt < retryCount; attempt += 1) {
+    if (!isRetryableProbeFailure(snapshot)) break;
+    snapshot = await runProbeAttempt(credentials.access, credentials.accountId, {
+      timeoutMs,
+      fetchImpl,
+      nowMs,
+    });
+  }
+
+  return snapshot;
 };
 
 export const probeQuotaLine = async (): Promise<string> => {
