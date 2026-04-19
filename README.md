@@ -134,6 +134,14 @@ OPENCODE_CODEX_QUOTA_RETRY_COUNT=1
 
 Allowed values: `0`, `1` (default), `2`. Values above `2` clamp to `2`; invalid values fall back to default.
 
+Set probe model (advanced; optional):
+
+```bash
+OPENCODE_CODEX_QUOTA_MODEL=gpt-5.3-codex
+```
+
+Default is `gpt-5.3-codex`.
+
 Advanced: override the internal refresh path (optional):
 
 ```bash

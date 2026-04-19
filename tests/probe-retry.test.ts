@@ -57,6 +57,94 @@ test("probeQuota does not retry auth/http 401 failures", async () => {
   assert.equal(snapshot.statusCode, 401);
 });
 
+test("probeQuota does not fallback to a different model when model is unsupported", async () => {
+  const seenModels: string[] = [];
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body ?? "{}")) as { model?: string };
+    const model = body.model ?? "";
+    seenModels.push(model);
+
+    if (model === "gpt-5.3-codex") {
+      return new Response(
+        JSON.stringify({
+          detail:
+            "The 'gpt-5.3-codex' model is not supported when using Codex with a ChatGPT account.",
+        }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      );
+    }
+
+    return successResponse();
+  };
+
+  const snapshot = await probeQuota({
+    retryCount: 0,
+    fetchImpl,
+    credentials: { accessToken: "token" },
+  });
+
+  assert.deepEqual(seenModels, ["gpt-5.3-codex"]);
+  assert.equal(snapshot.status, "error");
+  assert.equal(snapshot.statusCode, 400);
+  assert.match(snapshot.error ?? "", /model is not supported/i);
+});
+
+test("probeQuota extracts JSON detail for probe errors", async () => {
+  const fetchImpl: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({ detail: "The selected model is not available" }),
+      { status: 400, headers: { "content-type": "application/json" } },
+    );
+  };
+
+  const snapshot = await probeQuota({
+    retryCount: 0,
+    fetchImpl,
+    credentials: { accessToken: "token" },
+  });
+
+  assert.equal(snapshot.status, "error");
+  assert.equal(snapshot.statusCode, 400);
+  assert.equal(snapshot.error, "The selected model is not available");
+});
+
+test("probeQuota honors OPENCODE_CODEX_QUOTA_MODEL env override", async () => {
+  const seenModels: string[] = [];
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body ?? "{}")) as { model?: string };
+    seenModels.push(body.model ?? "");
+    return successResponse();
+  };
+
+  const snapshot = await probeQuota({
+    fetchImpl,
+    credentials: { accessToken: "token" },
+    env: { OPENCODE_CODEX_QUOTA_MODEL: "gpt-5.3-codex" },
+  });
+
+  assert.deepEqual(seenModels, ["gpt-5.3-codex"]);
+  assert.equal(snapshot.statusCode, 200);
+});
+
+test("probeQuota model option overrides env model", async () => {
+  const seenModels: string[] = [];
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body ?? "{}")) as { model?: string };
+    seenModels.push(body.model ?? "");
+    return successResponse();
+  };
+
+  const snapshot = await probeQuota({
+    fetchImpl,
+    credentials: { accessToken: "token" },
+    model: "gpt-5.1-codex",
+    env: { OPENCODE_CODEX_QUOTA_MODEL: "gpt-5.3-codex" },
+  });
+
+  assert.deepEqual(seenModels, ["gpt-5.1-codex"]);
+  assert.equal(snapshot.statusCode, 200);
+});
+
 test("probeQuota does not retry when retry count is disabled", async () => {
   let calls = 0;
   const fetchImpl: typeof fetch = async () => {

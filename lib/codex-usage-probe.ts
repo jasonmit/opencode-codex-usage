@@ -42,7 +42,9 @@ const errorMessage = (error: unknown): string => {
 const CODEX_URL = "https://chatgpt.com/backend-api/codex/responses";
 const REQUEST_TIMEOUT_MS = 15_000;
 const RETRY_COUNT_ENV = "OPENCODE_CODEX_QUOTA_RETRY_COUNT";
+const MODEL_ENV = "OPENCODE_CODEX_QUOTA_MODEL";
 const MAX_RETRY_COUNT = 2;
+const DEFAULT_PROBE_MODEL = "gpt-5.3-codex";
 
 type WindowPair<T> = {
   primary: T;
@@ -64,6 +66,7 @@ export type ProbeSnapshot = {
 export type ProbeQuotaOptions = {
   retryCount?: number;
   timeoutMs?: number;
+  model?: string;
   fetchImpl?: typeof fetch;
   env?: NodeJS.ProcessEnv;
   credentials?: {
@@ -134,6 +137,40 @@ export const resolveProbeRetryCount = (
   fallback = 1,
 ): number => {
   return parseRetryCount(env[RETRY_COUNT_ENV], fallback);
+};
+
+export const resolveProbeModel = (
+  env: NodeJS.ProcessEnv = process.env,
+  fallback = DEFAULT_PROBE_MODEL,
+): string => {
+  const configured = env[MODEL_ENV]?.trim();
+  return configured && configured !== "" ? configured : fallback;
+};
+
+const parseProbeErrorDetail = (raw: string): string => {
+  const trimmed = raw.trim();
+  if (trimmed === "") return "empty error response";
+
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      detail?: unknown;
+      error?: { message?: unknown };
+      message?: unknown;
+    };
+    if (typeof parsed.detail === "string" && parsed.detail.trim() !== "") {
+      return parsed.detail.trim();
+    }
+    if (typeof parsed.error?.message === "string" && parsed.error.message.trim() !== "") {
+      return parsed.error.message.trim();
+    }
+    if (typeof parsed.message === "string" && parsed.message.trim() !== "") {
+      return parsed.message.trim();
+    }
+  } catch {
+    // Not JSON. Fall back to compact text.
+  }
+
+  return trimmed.replace(/\s+/g, " ");
 };
 
 const shouldRetryStatusCode = (statusCode: number | string | undefined): boolean => {
@@ -304,13 +341,14 @@ const runProbeAttempt = async (
   access: string,
   accountId: string,
   options: {
+    model: string;
     timeoutMs: number;
     fetchImpl: typeof fetch;
     nowMs: number;
   },
 ): Promise<ProbeSnapshot> => {
   const body = {
-    model: "gpt-5.1-codex",
+    model: options.model,
     instructions: "You are a coding assistant.",
     input: [{ role: "user", content: [{ type: "input_text", text: "reply ok" }] }],
     store: false,
@@ -348,7 +386,7 @@ const runProbeAttempt = async (
   }
 
   if (!response.ok) {
-    const detail = responseText.slice(0, 120).replace(/\n/g, " ").trim();
+    const detail = parseProbeErrorDetail(responseText).slice(0, 240);
     return toProbeError("error", detail, response.status);
   }
 
@@ -390,6 +428,7 @@ const runProbeAttempt = async (
 };
 
 export const probeQuota = async (options: ProbeQuotaOptions = {}): Promise<ProbeSnapshot> => {
+  const model = options.model?.trim() || resolveProbeModel(options.env);
   const retryCount = Math.min(
     options.retryCount ?? resolveProbeRetryCount(options.env),
     MAX_RETRY_COUNT,
@@ -404,6 +443,7 @@ export const probeQuota = async (options: ProbeQuotaOptions = {}): Promise<Probe
   }
 
   let snapshot = await runProbeAttempt(credentials.access, credentials.accountId, {
+    model,
     timeoutMs,
     fetchImpl,
     nowMs,
@@ -412,6 +452,7 @@ export const probeQuota = async (options: ProbeQuotaOptions = {}): Promise<Probe
   for (let attempt = 0; attempt < retryCount; attempt += 1) {
     if (!isRetryableProbeFailure(snapshot)) break;
     snapshot = await runProbeAttempt(credentials.access, credentials.accountId, {
+      model,
       timeoutMs,
       fetchImpl,
       nowMs,

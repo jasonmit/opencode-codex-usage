@@ -71,6 +71,52 @@ const stringFromUnknown = (value: unknown): string | undefined => {
   return typeof value === "string" ? value : undefined;
 };
 
+const nonEmptyStringFromUnknown = (value: unknown): string | undefined => {
+  const text = stringFromUnknown(value)?.trim();
+  return text ? text : undefined;
+};
+
+export const resolveModelFromEventProperties = (
+  properties: Record<string, unknown> | undefined,
+): string | undefined => {
+  if (!properties) return undefined;
+
+  const directModel = nonEmptyStringFromUnknown(properties.model);
+  if (directModel) return directModel;
+
+  const directModelName = nonEmptyStringFromUnknown(properties.modelName);
+  if (directModelName) return directModelName;
+
+  const directModelId = nonEmptyStringFromUnknown(properties.modelID);
+  if (directModelId) return directModelId;
+
+  const info = properties.info;
+  if (typeof info === "object" && info !== null) {
+    const infoRecord = info as Record<string, unknown>;
+
+    const infoModelId = nonEmptyStringFromUnknown(infoRecord.modelID);
+    if (infoModelId) return infoModelId;
+
+    const infoModel = infoRecord.model;
+    if (typeof infoModel === "object" && infoModel !== null) {
+      const infoModelRecord = infoModel as Record<string, unknown>;
+      const nestedModelId = nonEmptyStringFromUnknown(infoModelRecord.modelID);
+      if (nestedModelId) return nestedModelId;
+
+      const nestedModelName = nonEmptyStringFromUnknown(infoModelRecord.modelName);
+      if (nestedModelName) return nestedModelName;
+    }
+  }
+
+  const session = properties.session;
+  if (typeof session !== "object" || session === null) return undefined;
+  const sessionRecord = session as Record<string, unknown>;
+  return (
+    nonEmptyStringFromUnknown(sessionRecord.model) ??
+    nonEmptyStringFromUnknown(sessionRecord.modelName)
+  );
+};
+
 const pairFromUnknown = (value: unknown): [string, string] => {
   if (typeof value === "string") return pairFromText(value);
 
@@ -356,6 +402,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
   let pendingForce = false;
   let started = false;
   let lastBackgroundStatus: QuotaStatusState | undefined;
+  let sessionModel: string | undefined;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
   let triggerTimer: ReturnType<typeof setInterval> | undefined;
   const signalPath = resolveSignalPath();
@@ -410,7 +457,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
     running = true;
 
     try {
-      const parsed = await probeQuota();
+      const parsed = await probeQuota({ model: sessionModel });
       const probeError = parsed.error?.trim();
       if (probeError) {
         await logPluginError("quota probe failed", { detail: probeError, worktree });
@@ -552,6 +599,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
   const stopBackgroundWorkersAndReset = (): void => {
     started = false;
     lastBackgroundStatus = undefined;
+    sessionModel = undefined;
     stopBackgroundWorkers();
   };
 
@@ -585,6 +633,11 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
       throw new Error("opencode-codex-usage:handled");
     },
     event: ({ event }: { event: PluginEvent }) => {
+      const eventModel = resolveModelFromEventProperties(event.properties);
+      if (eventModel) {
+        sessionModel = eventModel;
+      }
+
       if (isSessionCreatedEvent(event.type)) {
         restartBackgroundWorkers();
         return;
