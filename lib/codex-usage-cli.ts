@@ -12,8 +12,9 @@ export type CliOptions = {
   pretty: boolean;
   printJson: boolean;
   retryCount?: number;
-  setup: boolean;
-  setupConfigPath?: string;
+  install: boolean;
+  uninstall: boolean;
+  configPath?: string;
 };
 
 const helpText = () => {
@@ -27,14 +28,20 @@ const helpText = () => {
     "  --pretty          Show human-friendly quota output",
     "  --no-notify       Skip writing trigger signal file",
     "  --retry <count>   Retry transient probe failures (0-2)",
-    "  --setup           Add plugin path to OpenCode config",
-    "  --config <path>   Config file path to use with --setup",
+    "  --install         Add plugin path to OpenCode config",
+    "  --uninstall       Remove plugin path from OpenCode config",
+    "  --config <path>   Config file path to use with --install/--uninstall",
     "",
     "Examples:",
     "  opencode-codex-usage",
     "  opencode-codex-usage --json",
-    "  opencode-codex-usage --setup --config ~/.config/opencode/opencode.jsonc",
+    "  opencode-codex-usage --install --config ~/.config/opencode/opencode.jsonc",
+    "  opencode-codex-usage --uninstall",
   ].join("\n");
+};
+
+const escapeForRegExp = (text: string): string => {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 };
 
 const findMatchingBracket = (text: string, openIndex: number): number => {
@@ -114,6 +121,111 @@ const addPluginProperty = (content: string, pluginPathLiteral: string): string |
   return `${content.slice(0, firstBrace + 1)}${insertion}${content.slice(firstBrace + 1)}`;
 };
 
+const splitTopLevelArrayItems = (content: string): string[] => {
+  const items: string[] = [];
+  let depthSquare = 0;
+  let depthCurly = 0;
+  let depthParen = 0;
+  let inString = false;
+  let escaped = false;
+  let segmentStart = 0;
+
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "[") {
+      depthSquare += 1;
+      continue;
+    }
+    if (char === "]") {
+      depthSquare = Math.max(0, depthSquare - 1);
+      continue;
+    }
+    if (char === "{") {
+      depthCurly += 1;
+      continue;
+    }
+    if (char === "}") {
+      depthCurly = Math.max(0, depthCurly - 1);
+      continue;
+    }
+    if (char === "(") {
+      depthParen += 1;
+      continue;
+    }
+    if (char === ")") {
+      depthParen = Math.max(0, depthParen - 1);
+      continue;
+    }
+
+    if (char === "," && depthSquare === 0 && depthCurly === 0 && depthParen === 0) {
+      const entry = content.slice(segmentStart, index).trim();
+      if (entry !== "") items.push(entry);
+      segmentStart = index + 1;
+    }
+  }
+
+  const tail = content.slice(segmentStart).trim();
+  if (tail !== "") items.push(tail);
+
+  return items;
+};
+
+const isPluginEntryMatch = (item: string, pluginPathLiteral: string): boolean => {
+  if (item === pluginPathLiteral) return true;
+  const escapedLiteral = escapeForRegExp(pluginPathLiteral);
+  const tuplePattern = new RegExp(`^\\[\\s*${escapedLiteral}(?:\\s*,|\\s*\\])`);
+  return tuplePattern.test(item);
+};
+
+const removeFromPluginArray = (content: string, pluginPathLiteral: string): string | null => {
+  const pluginMatch = /"plugin"\s*:\s*\[/m.exec(content);
+  if (!pluginMatch || pluginMatch.index === undefined) return null;
+
+  const openIndex = content.indexOf("[", pluginMatch.index);
+  if (openIndex < 0) return null;
+
+  const closeIndex = findMatchingBracket(content, openIndex);
+  if (closeIndex < 0) return null;
+
+  const lineStart = content.lastIndexOf("\n", pluginMatch.index) + 1;
+  const baseIndent = content.slice(lineStart, pluginMatch.index).match(/^\s*/)?.[0] ?? "";
+  const itemIndent = `${baseIndent}  `;
+
+  const inside = content.slice(openIndex + 1, closeIndex);
+  const items = splitTopLevelArrayItems(inside);
+  const nextItems = items.filter((item) => !isPluginEntryMatch(item, pluginPathLiteral));
+
+  if (nextItems.length === items.length) return content;
+
+  const rebuiltInside =
+    nextItems.length === 0
+      ? `\n${baseIndent}`
+      : `\n${nextItems.map((item) => `${itemIndent}${item}`).join(",\n")}\n${baseIndent}`;
+
+  return `${content.slice(0, openIndex + 1)}${rebuiltInside}${content.slice(closeIndex)}`;
+};
+
 const pluginPathFromModule = (): string => {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
   return path.resolve(moduleDir, "..", "index.js");
@@ -150,13 +262,13 @@ const writeSignalFileSafely = async (signalPath: string, stamp: string): Promise
   }
 };
 
-const runSetup = async (configPath: string): Promise<void> => {
+const runInstall = async (configPath: string): Promise<void> => {
   const pluginPath = pluginPathFromModule();
   const pluginStat = await lstatIfExists(pluginPath);
 
   if (!pluginStat) {
     throw new Error(
-      `built plugin not found at ${pluginPath}; run \"npm run build\" first, then rerun opencode-codex-usage --setup`,
+      `built plugin not found at ${pluginPath}; run \"npm run build\" first, then rerun opencode-codex-usage --install`,
     );
   }
 
@@ -204,6 +316,34 @@ const runSetup = async (configPath: string): Promise<void> => {
   process.stdout.write(`Updated ${configPath} with plugin path.\n`);
 };
 
+const runUninstall = async (configPath: string): Promise<void> => {
+  const pluginPath = pluginPathFromModule();
+  const pluginPathLiteral = JSON.stringify(pluginPath);
+  const configStat = await lstatIfExists(configPath);
+
+  if (!configStat) {
+    process.stdout.write(`No changes needed. ${configPath} does not exist.\n`);
+    return;
+  }
+
+  const content = await readFile(configPath, "utf8");
+  const nextContent = removeFromPluginArray(content, pluginPathLiteral);
+
+  if (nextContent === null) {
+    throw new Error(
+      `could not safely update ${configPath}; remove this path manually from your plugin array:\n${pluginPath}`,
+    );
+  }
+
+  if (nextContent === content) {
+    process.stdout.write(`No changes needed. Plugin path is not configured.\n`);
+    return;
+  }
+
+  await writeFile(configPath, nextContent, "utf8");
+  process.stdout.write(`Updated ${configPath} by removing plugin path.\n`);
+};
+
 const wantsPrettyOutput = (argv: string[]): boolean => {
   return argv.some((arg) => arg === "--pretty");
 };
@@ -230,8 +370,9 @@ export const parseCliOptions = (argv: string[]): CliOptions => {
   let pretty = false;
   let printJson = false;
   let retryCount: number | undefined;
-  let setup = false;
-  let setupConfigPath: string | undefined;
+  let install = false;
+  let uninstall = false;
+  let configPath: string | undefined;
 
   for (let idx = 0; idx < argv.length; idx += 1) {
     const arg = argv[idx] ?? "";
@@ -256,8 +397,13 @@ export const parseCliOptions = (argv: string[]): CliOptions => {
       continue;
     }
 
-    if (arg === "--setup") {
-      setup = true;
+    if (arg === "--install" || arg === "--setup") {
+      install = true;
+      continue;
+    }
+
+    if (arg === "--uninstall") {
+      uninstall = true;
       continue;
     }
 
@@ -281,18 +427,22 @@ export const parseCliOptions = (argv: string[]): CliOptions => {
       if (!rawValue || rawValue.startsWith("--")) {
         throw new Error("--config requires a value");
       }
-      setupConfigPath = rawValue;
+      configPath = rawValue;
       idx += 1;
       continue;
     }
 
     if (arg.startsWith("--config=")) {
-      setupConfigPath = arg.slice("--config=".length);
+      configPath = arg.slice("--config=".length);
       continue;
     }
   }
 
-  return { help, noNotify, pretty, printJson, retryCount, setup, setupConfigPath };
+  if (install && uninstall) {
+    throw new Error("--install and --uninstall cannot be combined");
+  }
+
+  return { help, noNotify, pretty, printJson, retryCount, install, uninstall, configPath };
 };
 
 export const runCli = async (argv: string[] = process.argv.slice(2)): Promise<void> => {
@@ -302,12 +452,14 @@ export const runCli = async (argv: string[] = process.argv.slice(2)): Promise<vo
     return;
   }
 
-  if (options.setup) {
+  if (options.install || options.uninstall) {
     const defaultConfigPath = path.join(os.homedir(), ".config", "opencode", "opencode.jsonc");
-    const configPath = options.setupConfigPath
-      ? path.resolve(options.setupConfigPath)
-      : defaultConfigPath;
-    await runSetup(configPath);
+    const configPath = options.configPath ? path.resolve(options.configPath) : defaultConfigPath;
+    if (options.install) {
+      await runInstall(configPath);
+    } else {
+      await runUninstall(configPath);
+    }
     return;
   }
 

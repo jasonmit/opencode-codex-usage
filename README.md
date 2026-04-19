@@ -21,7 +21,7 @@ Instead of checking the web dashboard, you get quota toasts directly in OpenCode
 
 ```bash
 npm install -g opencode-codex-usage
-opencode-codex-usage --setup
+opencode-codex-usage --install
 ```
 
 Then restart OpenCode.
@@ -29,7 +29,7 @@ Then restart OpenCode.
 ### Option B: run with npx (no global install)
 
 ```bash
-npx opencode-codex-usage --setup
+npx opencode-codex-usage --install
 ```
 
 Then restart OpenCode.
@@ -47,7 +47,7 @@ npm run build
 
 ```bash
 npm link
-opencode-codex-usage --setup
+opencode-codex-usage --install
 ```
 
 3. Restart OpenCode.
@@ -65,7 +65,7 @@ This means quota checks run locally and the command is handled silently without 
 
 You can still run `opencode-codex-usage` directly when you want an immediate quota refresh from a shell.
 
-After setup verify end-to-end:
+After install verify end-to-end:
 
 ```bash
 OPENCODE_CODEX_QUOTA_TOAST_THRESHOLD=always opencode
@@ -81,8 +81,9 @@ Flags for `opencode-codex-usage`:
 - `--pretty` - show a human-friendly quota view with ASCII usage bars.
 - `--no-notify` - skip the refresh notification step.
 - `--retry <count>` - retry transient probe failures (`0-2`). Overrides env for current run.
-- `--setup` - update OpenCode config with plugin path only.
-- `--config <path>` - with `--setup`, use a non-default OpenCode config path.
+- `--install` - update OpenCode config with plugin path only.
+- `--uninstall` - remove plugin path from OpenCode config.
+- `--config <path>` - with `--install`/`--uninstall`, use a non-default OpenCode config path.
 - On error, JSON is written to stderr and the process exits non-zero.
 
 Remove global install:
@@ -210,5 +211,5 @@ npm run format
 Auto-configure OpenCode with local plugin path:
 
 ```bash
-opencode-codex-usage --setup
+opencode-codex-usage --install
 ```

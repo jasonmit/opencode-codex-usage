@@ -9,8 +9,9 @@ test("parseCliOptions uses silent-json defaults", () => {
     pretty: false,
     printJson: false,
     retryCount: undefined,
-    setup: false,
-    setupConfigPath: undefined,
+    install: false,
+    uninstall: false,
+    configPath: undefined,
   });
 });
 
@@ -21,8 +22,9 @@ test("parseCliOptions recognizes output and notify flags", () => {
     pretty: false,
     printJson: true,
     retryCount: undefined,
-    setup: false,
-    setupConfigPath: undefined,
+    install: false,
+    uninstall: false,
+    configPath: undefined,
   });
   assert.deepEqual(parseCliOptions(["--json"]), {
     help: false,
@@ -30,8 +32,9 @@ test("parseCliOptions recognizes output and notify flags", () => {
     pretty: false,
     printJson: true,
     retryCount: undefined,
-    setup: false,
-    setupConfigPath: undefined,
+    install: false,
+    uninstall: false,
+    configPath: undefined,
   });
 });
 
@@ -42,20 +45,45 @@ test("parseCliOptions recognizes pretty output flag", () => {
     pretty: true,
     printJson: true,
     retryCount: undefined,
-    setup: false,
-    setupConfigPath: undefined,
+    install: false,
+    uninstall: false,
+    configPath: undefined,
   });
 });
 
-test("parseCliOptions recognizes setup flag", () => {
+test("parseCliOptions recognizes install and setup alias flags", () => {
+  assert.deepEqual(parseCliOptions(["--install"]), {
+    help: false,
+    noNotify: false,
+    pretty: false,
+    printJson: false,
+    retryCount: undefined,
+    install: true,
+    uninstall: false,
+    configPath: undefined,
+  });
   assert.deepEqual(parseCliOptions(["--setup"]), {
     help: false,
     noNotify: false,
     pretty: false,
     printJson: false,
     retryCount: undefined,
-    setup: true,
-    setupConfigPath: undefined,
+    install: true,
+    uninstall: false,
+    configPath: undefined,
+  });
+});
+
+test("parseCliOptions recognizes uninstall flag", () => {
+  assert.deepEqual(parseCliOptions(["--uninstall"]), {
+    help: false,
+    noNotify: false,
+    pretty: false,
+    printJson: false,
+    retryCount: undefined,
+    install: false,
+    uninstall: true,
+    configPath: undefined,
   });
 });
 
@@ -66,11 +94,11 @@ test("parseCliOptions recognizes help flags", () => {
 
 test("parseCliOptions accepts setup config path", () => {
   assert.equal(
-    parseCliOptions(["--setup", "--config", "./tmp/opencode.jsonc"]).setupConfigPath,
+    parseCliOptions(["--install", "--config", "./tmp/opencode.jsonc"]).configPath,
     "./tmp/opencode.jsonc",
   );
   assert.equal(
-    parseCliOptions(["--setup", "--config=/tmp/opencode.jsonc"]).setupConfigPath,
+    parseCliOptions(["--uninstall", "--config=/tmp/opencode.jsonc"]).configPath,
     "/tmp/opencode.jsonc",
   );
 });
@@ -88,4 +116,8 @@ test("parseCliOptions rejects invalid retry count", () => {
   assert.throws(() => parseCliOptions(["--retry"]), /requires a value/);
   assert.throws(() => parseCliOptions(["--retry", "abc"]), /integer between 0 and 2/);
   assert.throws(() => parseCliOptions(["--retry", "9"]), /between 0 and 2/);
+});
+
+test("parseCliOptions rejects conflicting install and uninstall flags", () => {
+  assert.throws(() => parseCliOptions(["--install", "--uninstall"]), /cannot be combined/);
 });

@@ -5,3 +5,4 @@ dist/
 .DS_Store
 *.log
 .opencode-codex-usage-trigger
+.opencode/*
