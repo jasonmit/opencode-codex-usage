@@ -7,6 +7,7 @@ import {
   isSessionDeletedEvent,
   isSessionActivityEvent,
   isSessionCreatedEvent,
+  isSupportedProbeModel,
   resolveModelFromEventProperties,
 } from "../lib/codex-usage-toast-plugin.js";
 
@@ -89,4 +90,17 @@ test("extracts modelID from message.updated assistant-message shape", () => {
     }),
     "gpt-5.3-codex",
   );
+});
+
+test("accepts codex and gpt models for quota probes", () => {
+  assert.equal(isSupportedProbeModel("gpt-5.3-codex"), true);
+  assert.equal(isSupportedProbeModel("gpt-4.1"), true);
+  assert.equal(isSupportedProbeModel("gpt-5"), true);
+});
+
+test("rejects non-codex and non-gpt models for quota probes", () => {
+  assert.equal(isSupportedProbeModel("claude-sonnet-4"), false);
+  assert.equal(isSupportedProbeModel("llama"), false);
+  assert.equal(isSupportedProbeModel(""), false);
+  assert.equal(isSupportedProbeModel("   "), false);
 });

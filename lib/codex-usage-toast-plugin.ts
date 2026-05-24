@@ -239,6 +239,12 @@ export const isCommandExecutedEvent = (eventType: string): boolean => {
   return eventType === "command.executed";
 };
 
+export const isSupportedProbeModel = (model: string | undefined): boolean => {
+  const normalized = model?.trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized.includes("codex") || normalized.startsWith("gpt-");
+};
+
 type QuotaStatusState = "ok" | "warn" | "critical" | "error" | "unknown";
 
 const STATUS_SEVERITY_RANK: Record<QuotaStatusState, number> = {
@@ -634,7 +640,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
     },
     event: ({ event }: { event: PluginEvent }) => {
       const eventModel = resolveModelFromEventProperties(event.properties);
-      if (eventModel) {
+      if (isSupportedProbeModel(eventModel)) {
         sessionModel = eventModel;
       }
 
