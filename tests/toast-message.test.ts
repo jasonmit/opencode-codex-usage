@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { messageFromParsed } from "../lib/codex-usage-toast-plugin.js";
+import { messageFromParsed, toastBodyFromParsed } from "../lib/codex-usage-toast-plugin.js";
 
 test("labels usage with compact window summary", () => {
   const message = messageFromParsed({
@@ -10,7 +10,7 @@ test("labels usage with compact window summary", () => {
     windowMinutes: { primary: 300, secondary: 10080 },
   });
 
-  assert.equal(message, "⏳ 5h 81% (reset 1h0m) | 7d 9% (reset 7d0h)");
+  assert.equal(message, "⏳ 5h: 81% used, reset 1h0m | 7d: 9% used, reset 7d0h");
 });
 
 test("falls back to compact placeholders for missing metric values", () => {
@@ -20,7 +20,7 @@ test("falls back to compact placeholders for missing metric values", () => {
     reset: { primary: null, secondary: null },
   });
 
-  assert.equal(message, "⏳ A - (reset -) | B - (reset -)");
+  assert.equal(message, "⏳ A: - used, reset - | B: - used, reset -");
 });
 
 test("falls back to neutral labels when window minutes are missing", () => {
@@ -30,7 +30,7 @@ test("falls back to neutral labels when window minutes are missing", () => {
     reset: { primary: "1h0m", secondary: "7d0h" },
   });
 
-  assert.equal(message, "⏳ A 81% (reset 1h0m) | B 9% (reset 7d0h)");
+  assert.equal(message, "⏳ A: 81% used, reset 1h0m | B: 9% used, reset 7d0h");
 });
 
 test("keeps backward compatibility with legacy pair strings", () => {
@@ -40,7 +40,7 @@ test("keeps backward compatibility with legacy pair strings", () => {
     reset: "1h0m/7d0h",
   });
 
-  assert.equal(message, "⏳ A 81% (reset 1h0m) | B 9% (reset 7d0h)");
+  assert.equal(message, "⏳ A: 81% used, reset 1h0m | B: 9% used, reset 7d0h");
 });
 
 test("keeps error-focused toast message unchanged", () => {
@@ -50,4 +50,21 @@ test("keeps error-focused toast message unchanged", () => {
   });
 
   assert.equal(message, "quota probe failed");
+});
+
+test("puts normal quota details in the toast message for a two-line toast", () => {
+  const body = toastBodyFromParsed(
+    {
+      status: "warn",
+      used: { primary: 81, secondary: 9 },
+      reset: { primary: "1h0m", secondary: "7d0h" },
+      windowMinutes: { primary: 300, secondary: 10080 },
+    },
+    5000,
+  );
+
+  assert.equal(body.title, "Codex quota ⚠️");
+  assert.equal(body.message, "⏳ 5h: 81% used, reset 1h0m | 7d: 9% used, reset 7d0h");
+  assert.equal(body.variant, "warning");
+  assert.equal(body.duration, 5000);
 });

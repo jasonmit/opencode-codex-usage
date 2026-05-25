@@ -355,8 +355,21 @@ export const messageFromParsed = (parsed: ProbeSnapshot): string => {
   const secondWindowLabel = windowLabelFromMinutes(windowB, "B").replace(/\s+window$/, "");
   const [usedWindowA, usedWindowB] = pairFromUnknown(parsed.used);
   const [resetWindowA, resetWindowB] = pairFromUnknown(parsed.reset);
-  const compact = `${firstWindowLabel} ${usageText(usedWindowA)} (reset ${resetWindowA}) | ${secondWindowLabel} ${usageText(usedWindowB)} (reset ${resetWindowB})`;
+  const compact = `${firstWindowLabel}: ${usageText(usedWindowA)} used, reset ${resetWindowA} | ${secondWindowLabel}: ${usageText(usedWindowB)} used, reset ${resetWindowB}`;
   return `⏳ ${compact}`;
+};
+
+export const toastBodyFromParsed = (
+  parsed: ProbeSnapshot,
+  duration: number,
+): ToastPayload["body"] => {
+  const message = messageFromParsed(parsed);
+  return {
+    title: toastTitleForStatus(parsed.status),
+    message,
+    variant: toastVariantForStatus(parsed.status),
+    duration,
+  };
 };
 
 export const resolvePollMs = (
@@ -496,12 +509,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
       }
 
       await client.tui.showToast({
-        body: {
-          title: toastTitleForStatus(parsed.status),
-          message: messageFromParsed(parsed),
-          variant: toastVariantForStatus(parsed.status),
-          duration: toastDurationMs,
-        },
+        body: toastBodyFromParsed(parsed, toastDurationMs),
       });
       return { failed: false };
     } catch (error: unknown) {
