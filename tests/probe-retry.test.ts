@@ -32,6 +32,7 @@ test("probeQuota retries once on network failure", async () => {
     retryCount: 1,
     fetchImpl,
     credentials: { accessToken: "token" },
+    model: "gpt-5.5",
   });
 
   assert.equal(calls, 2);
@@ -50,6 +51,7 @@ test("probeQuota does not retry auth/http 401 failures", async () => {
     retryCount: 2,
     fetchImpl,
     credentials: { accessToken: "token" },
+    model: "gpt-5.5",
   });
 
   assert.equal(calls, 1);
@@ -57,9 +59,21 @@ test("probeQuota does not retry auth/http 401 failures", async () => {
   assert.equal(snapshot.statusCode, 401);
 });
 
-test("probeQuota does not fallback to a different model when model is unsupported", async () => {
+test("probeQuota uses supported default model for ChatGPT account auth", async () => {
   const seenModels: string[] = [];
-  const fetchImpl: typeof fetch = async (_input, init) => {
+  const seenUrls: string[] = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = String(input);
+    seenUrls.push(url);
+
+    if (url.includes("/codex/models")) {
+      assert.match(url, /client_version=1\.0\.0/);
+      return new Response(JSON.stringify({ models: [{ slug: "gpt-5.5" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
     const body = JSON.parse(String(init?.body ?? "{}")) as { model?: string };
     const model = body.model ?? "";
     seenModels.push(model);
@@ -83,10 +97,47 @@ test("probeQuota does not fallback to a different model when model is unsupporte
     credentials: { accessToken: "token" },
   });
 
-  assert.deepEqual(seenModels, ["gpt-5.3-codex"]);
-  assert.equal(snapshot.status, "error");
-  assert.equal(snapshot.statusCode, 400);
-  assert.match(snapshot.error ?? "", /model is not supported/i);
+  assert.equal(seenUrls[0]?.includes("/codex/models"), true);
+  assert.deepEqual(seenModels, ["gpt-5.5"]);
+  assert.equal(snapshot.statusCode, 200);
+});
+
+test("probeQuota canonicalizes OpenCode model variants to supported Codex slugs", async () => {
+  const seenModels: string[] = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = String(input);
+
+    if (url.includes("/codex/models")) {
+      return new Response(JSON.stringify({ models: [{ slug: "gpt-5.5" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    const body = JSON.parse(String(init?.body ?? "{}")) as { model?: string };
+    seenModels.push(body.model ?? "");
+    if (body.model === "gpt-5.5-fast") {
+      return new Response(
+        JSON.stringify({
+          detail:
+            "The 'gpt-5.5-fast' model is not supported when using Codex with a ChatGPT account.",
+        }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      );
+    }
+
+    return successResponse();
+  };
+
+  const snapshot = await probeQuota({
+    retryCount: 0,
+    fetchImpl,
+    credentials: { accessToken: "token" },
+    model: "gpt-5.5-fast",
+  });
+
+  assert.deepEqual(seenModels, ["gpt-5.5"]);
+  assert.equal(snapshot.statusCode, 200);
 });
 
 test("probeQuota extracts JSON detail for probe errors", async () => {
@@ -101,6 +152,7 @@ test("probeQuota extracts JSON detail for probe errors", async () => {
     retryCount: 0,
     fetchImpl,
     credentials: { accessToken: "token" },
+    model: "gpt-5.5",
   });
 
   assert.equal(snapshot.status, "error");
@@ -137,11 +189,11 @@ test("probeQuota model option overrides env model", async () => {
   const snapshot = await probeQuota({
     fetchImpl,
     credentials: { accessToken: "token" },
-    model: "gpt-5.1-codex",
+    model: "gpt-codex",
     env: { OPENCODE_CODEX_QUOTA_MODEL: "gpt-5.3-codex" },
   });
 
-  assert.deepEqual(seenModels, ["gpt-5.1-codex"]);
+  assert.deepEqual(seenModels, ["gpt-codex"]);
   assert.equal(snapshot.statusCode, 200);
 });
 

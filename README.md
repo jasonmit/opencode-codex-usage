@@ -17,6 +17,14 @@ Instead of checking the web dashboard, you get quota toasts directly in OpenCode
 
 ## Quick start
 
+Prerequisite: connect OpenCode to your ChatGPT Plus/Pro plan using OpenCode's native provider setup:
+
+```text
+/connect
+```
+
+Choose the OpenAI/ChatGPT plan option, then install this quota plugin.
+
 ### Option A: install from npm (recommended)
 
 ```bash
@@ -107,17 +115,7 @@ npm unlink -g opencode-codex-usage
 
 ## Configuration
 
-Auth file is auto-detected by OS:
-
-- Linux: `~/.local/share/opencode/auth.json` (or `$XDG_DATA_HOME/opencode/auth.json`)
-- macOS: `~/Library/Application Support/opencode/auth.json`
-- Windows: `%LOCALAPPDATA%\\opencode\\auth.json`
-
-Override auth path:
-
-```bash
-OPENCODE_AUTH_PATH=/custom/path/auth.json
-```
+Authentication is handled by OpenCode. Use `/connect` in OpenCode to connect a ChatGPT Plus/Pro plan before running quota checks.
 
 Set polling interval (milliseconds):
 
@@ -138,10 +136,10 @@ Allowed values: `0`, `1` (default), `2`. Values above `2` clamp to `2`; invalid 
 Set probe model (advanced; optional):
 
 ```bash
-OPENCODE_CODEX_QUOTA_MODEL=gpt-5.3-codex
+OPENCODE_CODEX_QUOTA_MODEL=gpt-5.5
 ```
 
-Default is `gpt-5.3-codex`.
+By default, the probe queries the authenticated Codex model list and uses the first supported model returned for the account.
 
 Advanced: override the internal refresh path (optional):
 

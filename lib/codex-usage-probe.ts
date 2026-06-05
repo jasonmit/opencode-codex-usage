@@ -40,11 +40,11 @@ const errorMessage = (error: unknown): string => {
 };
 
 const CODEX_URL = "https://chatgpt.com/backend-api/codex/responses";
+const CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models?client_version=1.0.0";
 const REQUEST_TIMEOUT_MS = 15_000;
 const RETRY_COUNT_ENV = "OPENCODE_CODEX_QUOTA_RETRY_COUNT";
 const MODEL_ENV = "OPENCODE_CODEX_QUOTA_MODEL";
 const MAX_RETRY_COUNT = 2;
-const DEFAULT_PROBE_MODEL = "gpt-5.3-codex";
 
 type WindowPair<T> = {
   primary: T;
@@ -141,10 +141,85 @@ export const resolveProbeRetryCount = (
 
 export const resolveProbeModel = (
   env: NodeJS.ProcessEnv = process.env,
-  fallback = DEFAULT_PROBE_MODEL,
+  fallback = "",
 ): string => {
   const configured = env[MODEL_ENV]?.trim();
   return configured && configured !== "" ? configured : fallback;
+};
+
+const shouldCanonicalizeConfiguredModel = (model: string): boolean => {
+  return /-(fast|low|medium|high|xhigh|minimal)$/.test(model);
+};
+
+const resolveSupportedProbeModels = async (
+  access: string,
+  accountId: string,
+  fetchImpl: typeof fetch,
+): Promise<string[] | ProbeSnapshot> => {
+  let response: Response;
+  let responseText = "";
+
+  try {
+    response = await fetchImpl(CODEX_MODELS_URL, {
+      headers: {
+        Authorization: `Bearer ${access}`,
+        accept: "application/json",
+        "openai-beta": "responses=experimental",
+        originator: "codex_cli_rs",
+        "chatgpt-account-id": accountId,
+      },
+    });
+
+    responseText = await response.text();
+  } catch (error) {
+    const detail = errorMessage(error);
+    return toProbeError("error", detail.slice(0, 120), "network");
+  }
+
+  if (!response.ok) {
+    const detail = parseProbeErrorDetail(responseText).slice(0, 240);
+    return toProbeError("error", detail, response.status);
+  }
+
+  try {
+    const parsed = JSON.parse(responseText) as { models?: Array<{ slug?: unknown }> };
+    const models: string[] = [];
+    for (const entry of parsed.models ?? []) {
+      if (typeof entry.slug !== "string") continue;
+      const model = entry.slug.trim();
+      if (model !== "") models.push(model);
+    }
+    if (models.length > 0) return models;
+  } catch {
+    return toProbeError("error", "invalid Codex models response", "model");
+  }
+
+  return toProbeError("error", "no supported Codex models returned for this account", "model");
+};
+
+const resolveDefaultProbeModel = async (
+  access: string,
+  accountId: string,
+  fetchImpl: typeof fetch,
+): Promise<string | ProbeSnapshot> => {
+  const supportedModels = await resolveSupportedProbeModels(access, accountId, fetchImpl);
+  if ("status" in supportedModels) return supportedModels;
+  return supportedModels[0] ?? toProbeError("error", "no supported Codex models returned for this account", "model");
+};
+
+const canonicalizeConfiguredProbeModel = async (
+  model: string,
+  access: string,
+  accountId: string,
+  fetchImpl: typeof fetch,
+): Promise<string> => {
+  if (!shouldCanonicalizeConfiguredModel(model)) return model;
+
+  const supportedModels = await resolveSupportedProbeModels(access, accountId, fetchImpl);
+  if ("status" in supportedModels) return model;
+
+  const sorted = [...supportedModels].sort((left, right) => right.length - left.length);
+  return sorted.find((supported) => model === supported || model.startsWith(`${supported}-`)) ?? model;
 };
 
 const parseProbeErrorDetail = (raw: string): string => {
@@ -428,7 +503,7 @@ const runProbeAttempt = async (
 };
 
 export const probeQuota = async (options: ProbeQuotaOptions = {}): Promise<ProbeSnapshot> => {
-  const model = options.model?.trim() || resolveProbeModel(options.env);
+  const configuredModel = options.model?.trim() || resolveProbeModel(options.env);
   const retryCount = Math.min(
     options.retryCount ?? resolveProbeRetryCount(options.env),
     MAX_RETRY_COUNT,
@@ -442,8 +517,18 @@ export const probeQuota = async (options: ProbeQuotaOptions = {}): Promise<Probe
     return credentials;
   }
 
+  const resolvedModel = configuredModel
+    ? await canonicalizeConfiguredProbeModel(
+        configuredModel,
+        credentials.access,
+        credentials.accountId,
+        fetchImpl,
+      )
+    : await resolveDefaultProbeModel(credentials.access, credentials.accountId, fetchImpl);
+  if (typeof resolvedModel !== "string") return resolvedModel;
+
   let snapshot = await runProbeAttempt(credentials.access, credentials.accountId, {
-    model,
+    model: resolvedModel,
     timeoutMs,
     fetchImpl,
     nowMs,
@@ -452,7 +537,7 @@ export const probeQuota = async (options: ProbeQuotaOptions = {}): Promise<Probe
   for (let attempt = 0; attempt < retryCount; attempt += 1) {
     if (!isRetryableProbeFailure(snapshot)) break;
     snapshot = await runProbeAttempt(credentials.access, credentials.accountId, {
-      model,
+      model: resolvedModel,
       timeoutMs,
       fetchImpl,
       nowMs,
