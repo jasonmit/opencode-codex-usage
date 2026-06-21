@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseCliOptions } from "../lib/codex-usage-cli.js";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  parseCliOptions,
+  resolvePluginInstallPath,
+  resolveTuiConfigPath,
+} from "../lib/codex-usage-cli.js";
 
 test("parseCliOptions uses silent-json defaults", () => {
   assert.deepEqual(parseCliOptions([]), {
@@ -120,4 +126,17 @@ test("parseCliOptions rejects invalid retry count", () => {
 
 test("parseCliOptions rejects conflicting install and uninstall flags", () => {
   assert.throws(() => parseCliOptions(["--install", "--uninstall"]), /cannot be combined/);
+});
+
+test("resolvePluginInstallPath targets package root for server and tui entrypoints", () => {
+  const distLibPath = path.join(fileURLToPath(new URL("..", import.meta.url)), "lib");
+
+  assert.equal(resolvePluginInstallPath(distLibPath), path.resolve(distLibPath, "..", ".."));
+});
+
+test("resolveTuiConfigPath targets tui config beside opencode config", () => {
+  assert.equal(
+    resolveTuiConfigPath("/home/alice/.config/opencode/opencode.jsonc"),
+    "/home/alice/.config/opencode/tui.json",
+  );
 });

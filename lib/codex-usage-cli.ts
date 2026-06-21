@@ -1,6 +1,7 @@
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { formatProbeOutput, probeQuota } from "./codex-usage-probe.js";
 import { statusState } from "./quota-format.js";
@@ -226,9 +227,17 @@ const removeFromPluginArray = (content: string, pluginPathLiteral: string): stri
   return `${content.slice(0, openIndex + 1)}${rebuiltInside}${content.slice(closeIndex)}`;
 };
 
+export const resolvePluginInstallPath = (moduleDir: string): string => {
+  return path.resolve(moduleDir, "..", "..");
+};
+
+export const resolveTuiConfigPath = (configPath: string): string => {
+  return path.join(path.dirname(configPath), "tui.json");
+};
+
 const pluginPathFromModule = (): string => {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-  return path.resolve(moduleDir, "..", "index.js");
+  return resolvePluginInstallPath(moduleDir);
 };
 
 const isNotFoundError = (error: unknown): boolean => {
@@ -455,10 +464,13 @@ export const runCli = async (argv: string[] = process.argv.slice(2)): Promise<vo
   if (options.install || options.uninstall) {
     const defaultConfigPath = path.join(os.homedir(), ".config", "opencode", "opencode.jsonc");
     const configPath = options.configPath ? path.resolve(options.configPath) : defaultConfigPath;
+    const tuiConfigPath = resolveTuiConfigPath(configPath);
     if (options.install) {
       await runInstall(configPath);
+      await runInstall(tuiConfigPath);
     } else {
       await runUninstall(configPath);
+      await runUninstall(tuiConfigPath);
     }
     return;
   }

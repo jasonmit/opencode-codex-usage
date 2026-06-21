@@ -628,24 +628,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
           template: string;
         }
       >;
-    }) => {
-      input.command ??= {};
-      input.command["codex-usage"] = {
-        description: "Show Codex quota",
-        template: "",
-      };
-    },
-    "command.execute.before": async (input: { command: string }): Promise<void> => {
-      if (!isCodexUsageCommand(input.command)) return;
-
-      const result = await runProbe({ force: true, showFailureToast: true });
-      if (result.failed) {
-        throw new Error(`opencode-codex-usage: ${result.detail ?? "quota probe failed"}`);
-      }
-      // We intentionally throw here to stop OpenCode's default command handling.
-      // The plugin has already handled /codex-usage (toast shown), so no further execution should occur.
-      throw new Error("opencode-codex-usage:handled");
-    },
+    }) => {},
     event: ({ event }: { event: PluginEvent }) => {
       const eventModel = resolveModelFromEventProperties(event.properties);
       if (isSupportedProbeModel(eventModel)) {
@@ -664,14 +647,6 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
 
       if (isSessionDeletedEvent(event.type)) {
         stopBackgroundWorkersAndReset();
-        return;
-      }
-
-      if (
-        isCommandExecutedEvent(event.type) &&
-        isCodexUsageCommand(stringFromUnknown(event.properties?.name))
-      ) {
-        runProbeSafely({ force: true, showFailureToast: true });
         return;
       }
 

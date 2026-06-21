@@ -1,6 +1,6 @@
 {
   "name": "opencode-codex-usage",
-  "version": "0.5.2",
+  "version": "1.0.0",
   "description": "Codex quota probe and OpenCode toast plugin",
   "license": "MIT",
   "repository": {
@@ -20,12 +20,18 @@
   ],
   "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./server": "./dist/index.js",
+    "./tui": "./dist/tui.js"
+  },
   "bin": {
     "opencode-codex-usage": "dist/bin/opencode-codex-usage.js"
   },
   "files": [
     "dist/bin/**/*.js",
     "dist/index.js",
+    "dist/tui.js",
     "dist/lib/**/*.js",
     "README.md"
   ],

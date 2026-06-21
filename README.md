@@ -63,13 +63,43 @@ opencode-codex-usage --install
 Manual plugin path (if you prefer editing config directly):
 
 ```json
+"<repo>"
+```
+
+Add that path to both OpenCode's server plugin config and TUI plugin config.
+
+## Upgrading to 1.0.0
+
+Version 1.0.0 changes the OpenCode integration from a server-only plugin to paired server and TUI plugins.
+This is a breaking setup change if you installed an older version manually or have an old plugin path in config.
+
+Old manual plugin paths are obsolete:
+
+```json
 "<repo>/dist/index.js"
 ```
 
+Use the package root instead:
+
+```json
+"<repo>"
+```
+
+Recommended upgrade:
+
+```bash
+npm install -g opencode-codex-usage@latest
+opencode-codex-usage --install
+```
+
+Then restart OpenCode.
+
+The installer updates both OpenCode's server plugin config and TUI plugin config. The `/codex-usage` command is now registered by the TUI plugin, while background quota checks remain in the server plugin.
+
 ## CLI commands
 
-The plugin registers a `/codex-usage` slash command and handles it in plugin hooks.
-This means quota checks run locally and the command is handled silently without an assistant turn.
+The TUI plugin registers a `/codex-usage` slash command.
+This means quota checks run locally and the command shows a toast without an assistant turn.
 
 You can still run `opencode-codex-usage` directly when you want an immediate quota refresh from a shell.
 
@@ -89,8 +119,8 @@ Flags for `opencode-codex-usage`:
 - `--pretty` - show a human-friendly quota view with ASCII usage bars.
 - `--no-notify` - skip the refresh notification step.
 - `--retry <count>` - retry transient probe failures (`0-2`). Overrides env for current run.
-- `--install` - update OpenCode config with plugin path only.
-- `--uninstall` - remove plugin path from OpenCode config.
+- `--install` - update OpenCode server config and TUI config with the plugin path.
+- `--uninstall` - remove the plugin path from OpenCode server config and TUI config.
 - `--config <path>` - with `--install`/`--uninstall`, use a non-default OpenCode config path.
 - On error, JSON is written to stderr and the process exits non-zero.
 

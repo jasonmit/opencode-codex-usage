@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  CodexQuotaToastPlugin,
   isCommandExecutedEvent,
   isCodexUsageCommand,
   isFileWatcherEvent,
@@ -10,6 +11,18 @@ import {
   isSupportedProbeModel,
   resolveModelFromEventProperties,
 } from "../lib/codex-usage-toast-plugin.js";
+
+const pluginContext = () => ({
+  worktree: "/tmp/worktree",
+  client: {
+    tui: {
+      showToast: async () => undefined,
+    },
+    app: {
+      log: async () => undefined,
+    },
+  },
+});
 
 test("matches observed session lifecycle event types", () => {
   assert.equal(isSessionCreatedEvent("session.created"), true);
@@ -35,6 +48,24 @@ test("matches codex usage command names", () => {
   assert.equal(isCodexUsageCommand("codex-usage"), true);
   assert.equal(isCodexUsageCommand("/other"), false);
   assert.equal(isCodexUsageCommand(undefined), false);
+});
+
+test("server plugin does not register codex usage as a session command", async () => {
+  const plugin = CodexQuotaToastPlugin(pluginContext());
+  const config: { command?: Record<string, { description: string; template: string }> } = {};
+
+  await plugin.config?.(config);
+  plugin.dispose?.();
+
+  assert.equal(config.command?.["codex-usage"], undefined);
+});
+
+test("server plugin does not intercept codex usage session command", async () => {
+  const plugin = CodexQuotaToastPlugin(pluginContext());
+  const hook = (plugin as Record<string, unknown>)["command.execute.before"];
+  plugin.dispose?.();
+
+  assert.equal(hook, undefined);
 });
 
 test("matches file watcher namespace event types", () => {
