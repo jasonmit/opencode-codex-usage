@@ -96,8 +96,7 @@ export const normalizeUsagePercent = (raw: string): number | null => {
   const parsed = Number.parseFloat(raw.trim());
   if (!Number.isFinite(parsed)) return null;
 
-  const normalized = parsed >= 0 && parsed <= 1 ? parsed * 100 : parsed;
-  const bounded = Math.max(0, Math.min(100, normalized));
+  const bounded = Math.max(0, Math.min(100, parsed));
   return Math.round(bounded);
 };
 

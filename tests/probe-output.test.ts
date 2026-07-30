@@ -93,8 +93,9 @@ test("formatProbeOutput aligns values for metadata rows", () => {
   assert.equal(statusValueStart, planValueStart);
 });
 
-test("normalizeUsagePercent handles decimal and bounded inputs", () => {
-  assert.equal(normalizeUsagePercent("0.81"), 81);
+test("normalizeUsagePercent handles direct percentages and bounded inputs", () => {
+  assert.equal(normalizeUsagePercent("1"), 1);
+  assert.equal(normalizeUsagePercent("2.4"), 2);
   assert.equal(normalizeUsagePercent("81"), 81);
   assert.equal(normalizeUsagePercent("101"), 100);
   assert.equal(normalizeUsagePercent("-5"), 0);

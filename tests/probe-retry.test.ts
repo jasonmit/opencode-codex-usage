@@ -6,7 +6,7 @@ const successResponse = (): Response => {
   return new Response("data: [DONE]\n", {
     status: 200,
     headers: {
-      "x-codex-primary-used-percent": "0.81",
+      "x-codex-primary-used-percent": "81",
       "x-codex-secondary-used-percent": "9",
       "x-codex-primary-reset-after-seconds": "3600",
       "x-codex-secondary-reset-after-seconds": "7200",
