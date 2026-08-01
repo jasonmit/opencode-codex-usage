@@ -147,6 +147,8 @@ npm unlink -g opencode-codex-usage
 
 Authentication is handled by OpenCode. Use `/connect` in OpenCode to connect a ChatGPT Plus/Pro plan before running quota checks.
 
+If the probe reports `provided authorization token is expired`, run `/connect` and reconnect your ChatGPT account.
+
 Set polling interval (milliseconds):
 
 ```bash
