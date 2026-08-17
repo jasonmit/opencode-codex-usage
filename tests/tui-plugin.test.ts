@@ -4,7 +4,7 @@ import TuiPluginModule from "../tui.js";
 import { CodexQuotaTuiPlugin } from "../tui.js";
 
 test("tui path plugin exports a stable id", () => {
-  assert.equal((TuiPluginModule as Record<string, unknown>).id, "opencode-codex-usage");
+  assert.equal(TuiPluginModule.id, "opencode-codex-usage");
 });
 
 type RegisteredCommand = {

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { z } from "zod";
 import { isRetryableProbeFailure, probeQuota } from "../lib/codex-usage-probe.js";
+
+const ProbeRequestSchema = z.object({ model: z.string().optional() });
 
 const successResponse = (): Response => {
   return new Response("data: [DONE]\n", {
@@ -74,7 +77,7 @@ test("probeQuota uses supported default model for ChatGPT account auth", async (
       });
     }
 
-    const body = JSON.parse(String(init?.body ?? "{}")) as { model?: string };
+    const body = ProbeRequestSchema.parse(JSON.parse(String(init?.body ?? "{}")));
     const model = body.model ?? "";
     seenModels.push(model);
 
@@ -102,6 +105,31 @@ test("probeQuota uses supported default model for ChatGPT account auth", async (
   assert.equal(snapshot.statusCode, 200);
 });
 
+test("probeQuota ignores malformed model entries before a supported model", async () => {
+  let selectedModel = "";
+  const fetchImpl: typeof fetch = async (input, init) => {
+    if (String(input).includes("/codex/models")) {
+      return new Response(JSON.stringify({ models: [null, { slug: 42 }, { slug: "gpt-5.5" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    const body = ProbeRequestSchema.parse(JSON.parse(String(init?.body ?? "{}")));
+    selectedModel = body.model ?? "";
+    return successResponse();
+  };
+
+  const snapshot = await probeQuota({
+    retryCount: 0,
+    fetchImpl,
+    credentials: { accessToken: "token" },
+  });
+
+  assert.equal(selectedModel, "gpt-5.5");
+  assert.equal(snapshot.statusCode, 200);
+});
+
 test("probeQuota canonicalizes OpenCode model variants to supported Codex slugs", async () => {
   const seenModels: string[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -114,7 +142,7 @@ test("probeQuota canonicalizes OpenCode model variants to supported Codex slugs"
       });
     }
 
-    const body = JSON.parse(String(init?.body ?? "{}")) as { model?: string };
+    const body = ProbeRequestSchema.parse(JSON.parse(String(init?.body ?? "{}")));
     seenModels.push(body.model ?? "");
     if (body.model === "gpt-5.5-fast") {
       return new Response(
@@ -142,10 +170,10 @@ test("probeQuota canonicalizes OpenCode model variants to supported Codex slugs"
 
 test("probeQuota extracts JSON detail for probe errors", async () => {
   const fetchImpl: typeof fetch = async () => {
-    return new Response(
-      JSON.stringify({ detail: "The selected model is not available" }),
-      { status: 400, headers: { "content-type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ detail: "The selected model is not available" }), {
+      status: 400,
+      headers: { "content-type": "application/json" },
+    });
   };
 
   const snapshot = await probeQuota({
@@ -160,10 +188,28 @@ test("probeQuota extracts JSON detail for probe errors", async () => {
   assert.equal(snapshot.error, "The selected model is not available");
 });
 
+test("probeQuota uses a valid error message when another error field is malformed", async () => {
+  const fetchImpl: typeof fetch = async () => {
+    return new Response(JSON.stringify({ detail: 123, message: "Usable fallback" }), {
+      status: 400,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const snapshot = await probeQuota({
+    retryCount: 0,
+    fetchImpl,
+    credentials: { accessToken: "token" },
+    model: "gpt-5.5",
+  });
+
+  assert.equal(snapshot.error, "Usable fallback");
+});
+
 test("probeQuota honors OPENCODE_CODEX_QUOTA_MODEL env override", async () => {
   const seenModels: string[] = [];
   const fetchImpl: typeof fetch = async (_input, init) => {
-    const body = JSON.parse(String(init?.body ?? "{}")) as { model?: string };
+    const body = ProbeRequestSchema.parse(JSON.parse(String(init?.body ?? "{}")));
     seenModels.push(body.model ?? "");
     return successResponse();
   };
@@ -181,7 +227,7 @@ test("probeQuota honors OPENCODE_CODEX_QUOTA_MODEL env override", async () => {
 test("probeQuota model option overrides env model", async () => {
   const seenModels: string[] = [];
   const fetchImpl: typeof fetch = async (_input, init) => {
-    const body = JSON.parse(String(init?.body ?? "{}")) as { model?: string };
+    const body = ProbeRequestSchema.parse(JSON.parse(String(init?.body ?? "{}")));
     seenModels.push(body.model ?? "");
     return successResponse();
   };

@@ -71,8 +71,7 @@ export const extractCompletedUsageFromSse = (text: string): ProbeUsage | null =>
     if (!payload || payload === "[DONE]") continue;
 
     try {
-      const event: unknown = JSON.parse(payload);
-      const completed = ResponseCompletedSchema.safeParse(event);
+      const completed = ResponseCompletedSchema.safeParse(JSON.parse(payload));
       if (!completed.success) continue;
       return completed.data.response?.usage ?? null;
     } catch {

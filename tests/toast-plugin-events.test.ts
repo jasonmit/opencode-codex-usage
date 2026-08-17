@@ -62,10 +62,10 @@ test("server plugin does not register codex usage as a session command", async (
 
 test("server plugin does not intercept codex usage session command", async () => {
   const plugin = CodexQuotaToastPlugin(pluginContext());
-  const hook = (plugin as Record<string, unknown>)["command.execute.before"];
+  const hasHook = "command.execute.before" in plugin;
   plugin.dispose?.();
 
-  assert.equal(hook, undefined);
+  assert.equal(hasHook, false);
 });
 
 test("matches file watcher namespace event types", () => {

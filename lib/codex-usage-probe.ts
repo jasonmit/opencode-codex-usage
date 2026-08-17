@@ -25,9 +25,28 @@ const AuthSchema = z.object({
     .optional(),
 });
 
+const CodexModelsResponseSchema = z.object({
+  models: z.array(z.unknown()),
+});
+
+const CodexModelSchema = z.object({
+  slug: z.string(),
+});
+
+const ProbeErrorSchema = z.object({
+  detail: z.unknown().optional(),
+  error: z.unknown().optional(),
+  message: z.unknown().optional(),
+});
+
+const NestedProbeErrorSchema = z.object({
+  message: z.unknown().optional(),
+});
+
+const NonEmptyStringSchema = z.string().trim().min(1);
+
 const parseAuthFile = (raw: string): AuthFile => {
-  const parsed: unknown = JSON.parse(raw);
-  const validated = AuthSchema.safeParse(parsed);
+  const validated = AuthSchema.safeParse(JSON.parse(raw));
   if (!validated.success) {
     throw new Error("invalid auth file shape");
   }
@@ -80,11 +99,12 @@ const toProbeError = (
   detail: string,
   statusCode?: number | string,
 ): ProbeSnapshot => {
-  return {
+  const snapshot: ProbeSnapshot = {
     status,
-    ...(statusCode !== undefined ? { statusCode } : {}),
     error: detail,
   };
+  if (statusCode !== undefined) snapshot.statusCode = statusCode;
+  return snapshot;
 };
 
 const parseOptionalInt = (raw: string): number | null => {
@@ -138,10 +158,7 @@ export const resolveProbeRetryCount = (
   return parseRetryCount(env[RETRY_COUNT_ENV], fallback);
 };
 
-export const resolveProbeModel = (
-  env: NodeJS.ProcessEnv = process.env,
-  fallback = "",
-): string => {
+export const resolveProbeModel = (env: NodeJS.ProcessEnv = process.env, fallback = ""): string => {
   const configured = env[MODEL_ENV]?.trim();
   return configured && configured !== "" ? configured : fallback;
 };
@@ -181,11 +198,16 @@ const resolveSupportedProbeModels = async (
   }
 
   try {
-    const parsed = JSON.parse(responseText) as { models?: Array<{ slug?: unknown }> };
+    const parsed = CodexModelsResponseSchema.safeParse(JSON.parse(responseText));
+    if (!parsed.success) {
+      return toProbeError("error", "invalid Codex models response", "model");
+    }
+
     const models: string[] = [];
-    for (const entry of parsed.models ?? []) {
-      if (typeof entry.slug !== "string") continue;
-      const model = entry.slug.trim();
+    for (const entry of parsed.data.models) {
+      const modelEntry = CodexModelSchema.safeParse(entry);
+      if (!modelEntry.success) continue;
+      const model = modelEntry.data.slug.trim();
       if (model !== "") models.push(model);
     }
     if (models.length > 0) return models;
@@ -203,7 +225,10 @@ const resolveDefaultProbeModel = async (
 ): Promise<string | ProbeSnapshot> => {
   const supportedModels = await resolveSupportedProbeModels(access, accountId, fetchImpl);
   if ("status" in supportedModels) return supportedModels;
-  return supportedModels[0] ?? toProbeError("error", "no supported Codex models returned for this account", "model");
+  return (
+    supportedModels[0] ??
+    toProbeError("error", "no supported Codex models returned for this account", "model")
+  );
 };
 
 const canonicalizeConfiguredProbeModel = async (
@@ -218,7 +243,9 @@ const canonicalizeConfiguredProbeModel = async (
   if ("status" in supportedModels) return model;
 
   const sorted = [...supportedModels].sort((left, right) => right.length - left.length);
-  return sorted.find((supported) => model === supported || model.startsWith(`${supported}-`)) ?? model;
+  return (
+    sorted.find((supported) => model === supported || model.startsWith(`${supported}-`)) ?? model
+  );
 };
 
 const parseProbeErrorDetail = (raw: string): string => {
@@ -226,20 +253,20 @@ const parseProbeErrorDetail = (raw: string): string => {
   if (trimmed === "") return "empty error response";
 
   try {
-    const parsed = JSON.parse(trimmed) as {
-      detail?: unknown;
-      error?: { message?: unknown };
-      message?: unknown;
-    };
-    if (typeof parsed.detail === "string" && parsed.detail.trim() !== "") {
-      return parsed.detail.trim();
-    }
-    if (typeof parsed.error?.message === "string" && parsed.error.message.trim() !== "") {
-      return parsed.error.message.trim();
-    }
-    if (typeof parsed.message === "string" && parsed.message.trim() !== "") {
-      return parsed.message.trim();
-    }
+    const parsed = ProbeErrorSchema.safeParse(JSON.parse(trimmed));
+    if (!parsed.success) return trimmed.replace(/\s+/g, " ");
+
+    const detail = NonEmptyStringSchema.safeParse(parsed.data.detail);
+    if (detail.success) return detail.data;
+
+    const nestedError = NestedProbeErrorSchema.safeParse(parsed.data.error);
+    const nestedMessage = NonEmptyStringSchema.safeParse(
+      nestedError.success ? nestedError.data.message : undefined,
+    );
+    if (nestedMessage.success) return nestedMessage.data;
+
+    const message = NonEmptyStringSchema.safeParse(parsed.data.message);
+    if (message.success) return message.data;
   } catch {
     // Not JSON. Fall back to compact text.
   }
@@ -487,18 +514,22 @@ const runProbeAttempt = async (
       ? healthLabel(String(primaryUsed), String(secondaryUsed))
       : healthLabel(primaryUsedRaw, secondaryUsedRaw);
 
-  return {
+  const snapshot: ProbeSnapshot = {
     status: state,
     statusCode: response.status,
     plan,
     profile,
     used: { primary: primaryUsed, secondary: secondaryUsed },
     reset: { primary: primaryReset, secondary: secondaryReset },
-    ...(hasWindowMinutes
-      ? { windowMinutes: { primary: primaryWindowMinutes, secondary: secondaryWindowMinutes } }
-      : {}),
     probeTokens,
   };
+  if (hasWindowMinutes) {
+    snapshot.windowMinutes = {
+      primary: primaryWindowMinutes,
+      secondary: secondaryWindowMinutes,
+    };
+  }
+  return snapshot;
 };
 
 export const probeQuota = async (options: ProbeQuotaOptions = {}): Promise<ProbeSnapshot> => {

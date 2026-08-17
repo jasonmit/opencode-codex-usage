@@ -54,6 +54,9 @@ const ToastThresholdSchema = z.preprocess(
   z.enum(TOAST_THRESHOLDS),
 );
 
+const PropertyRecordSchema = z.record(z.string(), z.unknown());
+const NonEmptyStringSchema = z.string().trim().min(1);
+
 const pairFromText = (raw: string): [string, string] => {
   const normalized = raw.trim();
   if (normalized === "") return ["-", "-"];
@@ -68,12 +71,13 @@ const textFromUnknown = (value: unknown): string => {
 };
 
 const stringFromUnknown = (value: unknown): string | undefined => {
-  return typeof value === "string" ? value : undefined;
+  const parsed = z.string().safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 };
 
 const nonEmptyStringFromUnknown = (value: unknown): string | undefined => {
-  const text = stringFromUnknown(value)?.trim();
-  return text ? text : undefined;
+  const parsed = NonEmptyStringSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 };
 
 export const resolveModelFromEventProperties = (
@@ -90,46 +94,37 @@ export const resolveModelFromEventProperties = (
   const directModelId = nonEmptyStringFromUnknown(properties.modelID);
   if (directModelId) return directModelId;
 
-  const info = properties.info;
-  if (typeof info === "object" && info !== null) {
-    const infoRecord = info as Record<string, unknown>;
-
-    const infoModelId = nonEmptyStringFromUnknown(infoRecord.modelID);
+  const info = PropertyRecordSchema.safeParse(properties.info);
+  if (info.success) {
+    const infoModelId = nonEmptyStringFromUnknown(info.data.modelID);
     if (infoModelId) return infoModelId;
 
-    const infoModel = infoRecord.model;
-    if (typeof infoModel === "object" && infoModel !== null) {
-      const infoModelRecord = infoModel as Record<string, unknown>;
-      const nestedModelId = nonEmptyStringFromUnknown(infoModelRecord.modelID);
+    const infoModel = PropertyRecordSchema.safeParse(info.data.model);
+    if (infoModel.success) {
+      const nestedModelId = nonEmptyStringFromUnknown(infoModel.data.modelID);
       if (nestedModelId) return nestedModelId;
 
-      const nestedModelName = nonEmptyStringFromUnknown(infoModelRecord.modelName);
+      const nestedModelName = nonEmptyStringFromUnknown(infoModel.data.modelName);
       if (nestedModelName) return nestedModelName;
     }
   }
 
-  const session = properties.session;
-  if (typeof session !== "object" || session === null) return undefined;
-  const sessionRecord = session as Record<string, unknown>;
+  const session = PropertyRecordSchema.safeParse(properties.session);
+  if (!session.success) return undefined;
   return (
-    nonEmptyStringFromUnknown(sessionRecord.model) ??
-    nonEmptyStringFromUnknown(sessionRecord.modelName)
+    nonEmptyStringFromUnknown(session.data.model) ??
+    nonEmptyStringFromUnknown(session.data.modelName)
   );
 };
 
 const pairFromUnknown = (value: unknown): [string, string] => {
   if (typeof value === "string") return pairFromText(value);
 
-  if (typeof value === "object" && value !== null) {
-    const record = value as {
-      primary?: unknown;
-      secondary?: unknown;
-      windowA?: unknown;
-      windowB?: unknown;
-    };
+  const record = PropertyRecordSchema.safeParse(value);
+  if (record.success) {
     return [
-      textFromUnknown(record.primary ?? record.windowA),
-      textFromUnknown(record.secondary ?? record.windowB),
+      textFromUnknown(record.data.primary ?? record.data.windowA),
+      textFromUnknown(record.data.secondary ?? record.data.windowB),
     ];
   }
 
@@ -157,16 +152,11 @@ const windowMinutesPairFromUnknown = (value: unknown): [number | undefined, numb
     return [positiveIntFromUnknown(left ?? ""), positiveIntFromUnknown(right ?? "")];
   }
 
-  if (typeof value === "object" && value !== null) {
-    const record = value as {
-      primary?: unknown;
-      secondary?: unknown;
-      windowA?: unknown;
-      windowB?: unknown;
-    };
+  const record = PropertyRecordSchema.safeParse(value);
+  if (record.success) {
     return [
-      positiveIntFromUnknown(record.primary ?? record.windowA),
-      positiveIntFromUnknown(record.secondary ?? record.windowB),
+      positiveIntFromUnknown(record.data.primary ?? record.data.windowA),
+      positiveIntFromUnknown(record.data.secondary ?? record.data.windowB),
     ];
   }
 
@@ -186,7 +176,7 @@ type ToastPayload = {
 
 type Client = {
   tui: {
-    showToast: (payload: ToastPayload) => Promise<unknown>;
+    showToast: (payload: ToastPayload) => Promise<void>;
   };
   app?: {
     log: (payload: {
@@ -196,7 +186,7 @@ type Client = {
         message: string;
         extra?: Record<string, unknown>;
       };
-    }) => Promise<unknown>;
+    }) => Promise<void>;
   };
 };
 
@@ -247,26 +237,27 @@ export const isSupportedProbeModel = (model: string | undefined): boolean => {
 
 type QuotaStatusState = "ok" | "warn" | "critical" | "error" | "unknown";
 
-const STATUS_SEVERITY_RANK: Record<QuotaStatusState, number> = {
+const STATUS_SEVERITY_RANK = {
   ok: 0,
   unknown: 1,
   warn: 2,
   critical: 3,
   error: 4,
-};
+} as const satisfies Record<QuotaStatusState, number>;
 
-const TOAST_VARIANT_BY_STATUS: Record<QuotaStatusState, ToastVariant> = {
+const QuotaStatusStateSchema = z.enum(["ok", "warn", "critical", "error", "unknown"]);
+
+const TOAST_VARIANT_BY_STATUS = {
   ok: "info",
   warn: "warning",
   critical: "error",
   error: "error",
   unknown: "warning",
-};
+} as const satisfies Record<QuotaStatusState, ToastVariant>;
 
 const statusStateNormalized = (rawStatus: string | undefined): QuotaStatusState => {
-  const state = statusState(rawStatus);
-  if (state in STATUS_SEVERITY_RANK) return state as QuotaStatusState;
-  return "unknown";
+  const state = QuotaStatusStateSchema.safeParse(statusState(rawStatus));
+  return state.success ? state.data : "unknown";
 };
 
 export const toastVariantForStatus = (rawStatus: string | undefined): ToastVariant => {
