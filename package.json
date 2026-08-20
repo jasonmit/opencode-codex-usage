@@ -13,9 +13,14 @@
   },
   "keywords": [
     "opencode",
+    "opencode-plugin",
     "codex",
+    "openai",
+    "chatgpt",
     "plugin",
     "quota",
+    "usage",
+    "rate-limit",
     "tui"
   ],
   "type": "module",
