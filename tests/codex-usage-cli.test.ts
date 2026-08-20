@@ -160,10 +160,7 @@ test("install reports one summary when server and TUI plugins are already config
       encoding: "utf8",
     });
 
-    assert.equal(
-      stdout,
-      "No changes needed. Server and TUI plugins are already configured.\n",
-    );
+    assert.equal(stdout, "No changes needed. Server and TUI plugins are already configured.\n");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

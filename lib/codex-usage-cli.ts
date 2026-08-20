@@ -469,9 +469,7 @@ export const runCli = async (argv: string[] = process.argv.slice(2)): Promise<vo
       const serverChanged = await runInstall(configPath);
       const tuiChanged = await runInstall(tuiConfigPath);
       if (!serverChanged && !tuiChanged) {
-        process.stdout.write(
-          `No changes needed. Server and TUI plugins are already configured.\n`,
-        );
+        process.stdout.write(`No changes needed. Server and TUI plugins are already configured.\n`);
       }
     } else {
       await runUninstall(configPath);
