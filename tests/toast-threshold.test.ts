@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   resolveToastThreshold,
   shouldToastForBackground,
   shouldToastForBackgroundTransition,
   type ToastThreshold,
-} from "../lib/codex-usage-toast-plugin.js";
+} from "#lib/codex-usage-toast-plugin.js";
+import { test } from "./test.ts";
 
 test("uses default threshold when env var is not set", () => {
   assert.equal(resolveToastThreshold({}), "warn");

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import TuiPluginModule from "../tui.js";
-import { CodexQuotaTuiPlugin } from "../tui.js";
+import TuiPluginModule from "#root/tui.js";
+import { CodexQuotaTuiPlugin } from "#root/tui.js";
+import { test } from "./test.ts";
 
 test("tui path plugin exports a stable id", () => {
   assert.equal(TuiPluginModule.id, "opencode-codex-usage");

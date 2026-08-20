@@ -14,4 +14,4 @@
 ## Verification
 
 - Add regression tests before behavior changes and bug fixes.
-- Run `npm test`, `npm run build`, and `npm run format:check` before completion.
+- Run `npm test`, `npm run lint`, `npm run build`, and `npm run format:check` before completion.

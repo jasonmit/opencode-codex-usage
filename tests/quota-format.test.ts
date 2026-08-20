@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   durationText,
   extractCompletedUsageFromSse,
   healthLabel,
   parseProbeLine,
   statusState,
-} from "../lib/quota-format.js";
+} from "#lib/quota-format.js";
+import { test } from "./test.ts";
 
 test("durationText formats common ranges", () => {
   assert.equal(durationText("59"), "0m");

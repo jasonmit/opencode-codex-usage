@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
-import { SIGNAL_FILENAME, resolveSignalPath } from "../lib/codex-usage-signal.js";
+import { SIGNAL_FILENAME, resolveSignalPath } from "#lib/codex-usage-signal.js";
+import { test } from "./test.ts";
 
 test("resolveSignalPath uses per-user temp path by default", () => {
   const actual = resolveSignalPath({});

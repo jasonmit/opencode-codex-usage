@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import path from "node:path";
-import { resolveAuthPath } from "../lib/auth-path.js";
+import { resolveAuthPath } from "#lib/auth-path.js";
+import { test } from "./test.ts";
 
 test("uses explicit OPENCODE_AUTH_PATH override", () => {
   const actual = resolveAuthPath({

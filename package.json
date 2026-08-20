@@ -25,6 +25,10 @@
     "./server": "./dist/index.js",
     "./tui": "./dist/tui.js"
   },
+  "imports": {
+    "#lib/*": "./dist/lib/*",
+    "#root/*": "./dist/*"
+  },
   "bin": {
     "opencode-codex-usage": "dist/bin/opencode-codex-usage.js"
   },
@@ -38,7 +42,8 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "npm run clean && tsc -p tsconfig.json && chmod +x dist/bin/opencode-codex-usage.js",
-    "test": "npm run clean && tsc -p tsconfig.test.json && chmod +x dist/bin/opencode-codex-usage.js && node --test \"dist/tests/**/*.test.js\"",
+    "test": "npm run clean && tsc -p tests/tsconfig.json && chmod +x dist/bin/opencode-codex-usage.js && node --test \"dist/tests/**/*.test.js\"",
+    "lint": "oxlint --type-aware --deny-warnings .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepack": "npm run build",
@@ -47,6 +52,8 @@
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "oxlint": "^1.79.0",
+    "oxlint-tsgolint": "^7.0.2001",
     "prettier": "^3.9.6",
     "rimraf": "^6.1.3",
     "typescript": "^7.0.2"

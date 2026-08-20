@@ -1,9 +1,9 @@
 import { statSync } from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 import { probeQuota, type ProbeSnapshot } from "./codex-usage-probe.js";
 import { statusState } from "./quota-format.js";
 import { resolveSignalPath } from "./codex-usage-signal.js";
-import { z } from "zod";
 
 const DEFAULT_POLL_MS = 10 * 60 * 1000;
 const POLL_MS_ENV = "OPENCODE_CODEX_QUOTA_POLL_MS";
@@ -56,6 +56,7 @@ const ToastThresholdSchema = z.preprocess(
 
 const PropertyRecordSchema = z.record(z.string(), z.unknown());
 const NonEmptyStringSchema = z.string().trim().min(1);
+const TextValueSchema = z.union([z.string(), z.number(), z.boolean()]);
 
 const pairFromText = (raw: string): [string, string] => {
   const normalized = raw.trim();
@@ -66,7 +67,9 @@ const pairFromText = (raw: string): [string, string] => {
 
 const textFromUnknown = (value: unknown): string => {
   if (value === null || value === undefined) return "-";
-  const normalized = String(value).trim();
+  const parsed = TextValueSchema.safeParse(value);
+  if (!parsed.success) return "-";
+  const normalized = String(parsed.data).trim();
   return normalized === "" ? "-" : normalized;
 };
 
@@ -335,7 +338,13 @@ const usageText = (value: string): string => {
   return `${normalized}%`;
 };
 
-export const messageFromParsed = (parsed: ProbeSnapshot): string => {
+type ProbeDisplaySnapshot = Omit<ProbeSnapshot, "used" | "reset" | "windowMinutes"> & {
+  used?: unknown;
+  reset?: unknown;
+  windowMinutes?: unknown;
+};
+
+export const messageFromParsed = (parsed: ProbeDisplaySnapshot): string => {
   const error = parsed.error?.trim();
   if (error) {
     return "quota probe failed";
@@ -371,7 +380,7 @@ export const messageFromParsed = (parsed: ProbeSnapshot): string => {
 };
 
 export const toastBodyFromParsed = (
-  parsed: ProbeSnapshot,
+  parsed: ProbeDisplaySnapshot,
   duration: number,
 ): ToastPayload["body"] => {
   const message = messageFromParsed(parsed);
@@ -631,7 +640,7 @@ export const CodexQuotaToastPlugin = ({ client, worktree }: PluginContext) => {
   ensureBackgroundWorkersStarted();
 
   return {
-    config: async (input: {
+    config: async (_input: {
       command?: Record<
         string,
         {

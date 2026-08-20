@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { resolveToastDurationMs } from "../lib/codex-usage-toast-plugin.js";
+import { resolveToastDurationMs } from "#lib/codex-usage-toast-plugin.js";
+import { test } from "./test.ts";
 
 test("uses default toast duration when env var is not set", () => {
   assert.equal(resolveToastDurationMs({}, 5000), 5000);

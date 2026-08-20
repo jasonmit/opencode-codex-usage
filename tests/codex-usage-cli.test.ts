@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
-import test from "node:test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   parseCliOptions,
   resolvePluginInstallPath,
   resolveTuiConfigPath,
-} from "../lib/codex-usage-cli.js";
+} from "#lib/codex-usage-cli.js";
+import { test } from "./test.ts";
 
 test("parseCliOptions uses silent-json defaults", () => {
   assert.deepEqual(parseCliOptions([]), {

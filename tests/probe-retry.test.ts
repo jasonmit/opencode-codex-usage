@@ -1,9 +1,21 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { z } from "zod";
-import { isRetryableProbeFailure, probeQuota } from "../lib/codex-usage-probe.js";
+import { isRetryableProbeFailure, probeQuota } from "#lib/codex-usage-probe.js";
+import { test } from "./test.ts";
 
 const ProbeRequestSchema = z.object({ model: z.string().optional() });
+
+const urlFromFetchInput = (input: Parameters<typeof fetch>[0]): string => {
+  if (typeof input === "string") return input;
+  return input instanceof URL ? input.href : input.url;
+};
+
+const probeRequestFromInit = (init: Parameters<typeof fetch>[1]) => {
+  if (typeof init?.body !== "string") {
+    throw new Error("expected string request body");
+  }
+  return ProbeRequestSchema.parse(JSON.parse(init.body));
+};
 
 const successResponse = (): Response => {
   return new Response("data: [DONE]\n", {
@@ -66,7 +78,7 @@ test("probeQuota uses supported default model for ChatGPT account auth", async (
   const seenModels: string[] = [];
   const seenUrls: string[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
-    const url = String(input);
+    const url = urlFromFetchInput(input);
     seenUrls.push(url);
 
     if (url.includes("/codex/models")) {
@@ -77,7 +89,7 @@ test("probeQuota uses supported default model for ChatGPT account auth", async (
       });
     }
 
-    const body = ProbeRequestSchema.parse(JSON.parse(String(init?.body ?? "{}")));
+    const body = probeRequestFromInit(init);
     const model = body.model ?? "";
     seenModels.push(model);
 
@@ -108,14 +120,14 @@ test("probeQuota uses supported default model for ChatGPT account auth", async (
 test("probeQuota ignores malformed model entries before a supported model", async () => {
   let selectedModel = "";
   const fetchImpl: typeof fetch = async (input, init) => {
-    if (String(input).includes("/codex/models")) {
+    if (urlFromFetchInput(input).includes("/codex/models")) {
       return new Response(JSON.stringify({ models: [null, { slug: 42 }, { slug: "gpt-5.5" }] }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
     }
 
-    const body = ProbeRequestSchema.parse(JSON.parse(String(init?.body ?? "{}")));
+    const body = probeRequestFromInit(init);
     selectedModel = body.model ?? "";
     return successResponse();
   };
@@ -133,7 +145,7 @@ test("probeQuota ignores malformed model entries before a supported model", asyn
 test("probeQuota canonicalizes OpenCode model variants to supported Codex slugs", async () => {
   const seenModels: string[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
-    const url = String(input);
+    const url = urlFromFetchInput(input);
 
     if (url.includes("/codex/models")) {
       return new Response(JSON.stringify({ models: [{ slug: "gpt-5.5" }] }), {
@@ -142,7 +154,7 @@ test("probeQuota canonicalizes OpenCode model variants to supported Codex slugs"
       });
     }
 
-    const body = ProbeRequestSchema.parse(JSON.parse(String(init?.body ?? "{}")));
+    const body = probeRequestFromInit(init);
     seenModels.push(body.model ?? "");
     if (body.model === "gpt-5.5-fast") {
       return new Response(
@@ -209,7 +221,7 @@ test("probeQuota uses a valid error message when another error field is malforme
 test("probeQuota honors OPENCODE_CODEX_QUOTA_MODEL env override", async () => {
   const seenModels: string[] = [];
   const fetchImpl: typeof fetch = async (_input, init) => {
-    const body = ProbeRequestSchema.parse(JSON.parse(String(init?.body ?? "{}")));
+    const body = probeRequestFromInit(init);
     seenModels.push(body.model ?? "");
     return successResponse();
   };
@@ -227,7 +239,7 @@ test("probeQuota honors OPENCODE_CODEX_QUOTA_MODEL env override", async () => {
 test("probeQuota model option overrides env model", async () => {
   const seenModels: string[] = [];
   const fetchImpl: typeof fetch = async (_input, init) => {
-    const body = ProbeRequestSchema.parse(JSON.parse(String(init?.body ?? "{}")));
+    const body = probeRequestFromInit(init);
     seenModels.push(body.model ?? "");
     return successResponse();
   };

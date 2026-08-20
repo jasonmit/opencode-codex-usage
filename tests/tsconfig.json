@@ -1,0 +1,7 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["../*.ts", "../bin/**/*.ts", "../lib/**/*.ts", "**/*.ts"]
+}

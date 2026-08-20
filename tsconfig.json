@@ -5,6 +5,10 @@
     "moduleResolution": "Bundler",
     "outDir": "dist",
     "rootDir": ".",
+    "paths": {
+      "#lib/*": ["./lib/*"],
+      "#root/*": ["./*"]
+    },
     "types": ["node"],
     "strict": true,
     "skipLibCheck": true,

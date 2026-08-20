@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { messageFromParsed, toastBodyFromParsed } from "../lib/codex-usage-toast-plugin.js";
+import { messageFromParsed, toastBodyFromParsed } from "#lib/codex-usage-toast-plugin.js";
+import { test } from "./test.ts";
 
 test("labels usage with compact window summary", () => {
   const message = messageFromParsed({
@@ -32,6 +32,18 @@ test("falls back to compact placeholders for missing metric values", () => {
   });
 
   assert.equal(message, "⏳ A: - used, reset - | B: - used, reset -");
+});
+
+test("falls back to placeholders for non-scalar metric values", () => {
+  const malformed = {
+    status: "ok",
+    used: { primary: { unexpected: true }, secondary: ["unexpected"] },
+    reset: { primary: "1h0m", secondary: "2h0m" },
+  };
+
+  const message = messageFromParsed(malformed);
+
+  assert.equal(message, "⏳ A: - used, reset 1h0m | B: - used, reset 2h0m");
 });
 
 test("falls back to neutral labels when window minutes are missing", () => {

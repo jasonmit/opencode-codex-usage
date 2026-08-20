@@ -277,7 +277,7 @@ const runInstall = async (configPath: string): Promise<boolean> => {
 
   if (!pluginStat) {
     throw new Error(
-      `built plugin not found at ${pluginPath}; run \"npm run build\" first, then rerun opencode-codex-usage --install`,
+      `built plugin not found at ${pluginPath}; run "npm run build" first, then rerun opencode-codex-usage --install`,
     );
   }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { toastVariantForStatus } from "../lib/codex-usage-toast-plugin.js";
+import { toastVariantForStatus } from "#lib/codex-usage-toast-plugin.js";
+import { test } from "./test.ts";
 
 test("maps status values to toast variants", () => {
   assert.equal(toastVariantForStatus("ok"), "info");

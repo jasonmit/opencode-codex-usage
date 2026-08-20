@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   formatProbeOutput,
   normalizeResetValue,
   normalizeUsagePercent,
   resolveProbeRetryCount,
-} from "../lib/codex-usage-probe.js";
+} from "#lib/codex-usage-probe.js";
+import { test } from "./test.ts";
 
 test("formatProbeOutput returns compact JSON by default", () => {
   const line = formatProbeOutput({ status: "ok", statusCode: 200 });

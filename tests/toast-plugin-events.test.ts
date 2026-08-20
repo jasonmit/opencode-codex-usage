@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   CodexQuotaToastPlugin,
   isCommandExecutedEvent,
@@ -10,7 +9,8 @@ import {
   isSessionCreatedEvent,
   isSupportedProbeModel,
   resolveModelFromEventProperties,
-} from "../lib/codex-usage-toast-plugin.js";
+} from "#lib/codex-usage-toast-plugin.js";
+import { test } from "./test.ts";
 
 const pluginContext = () => ({
   worktree: "/tmp/worktree",
