@@ -233,9 +233,10 @@ Example:
 ## Development
 
 ```bash
-npm run build
 npm test
-npm run format
+npm run lint
+npm run build
+npm run format:check
 ```
 
 Auto-configure OpenCode with local plugin path:
