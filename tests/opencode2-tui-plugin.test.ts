@@ -85,6 +85,7 @@ test("OpenCode 2 TUI plugin registers command, shortcut, toast, and cleanup", as
 test("OpenCode 2 TUI probes through the connected server RPC", async () => {
   let monitorOptions: QuotaMonitorOptions | undefined;
   let rpcCalls = 0;
+  let rpcResult: unknown = { status: "ok" };
   const plugin = createOpenCode2TuiPlugin(undefined, (options) => {
     monitorOptions = options;
     return {
@@ -98,7 +99,7 @@ test("OpenCode 2 TUI probes through the connected server RPC", async () => {
       rpc: () => ({
         usage: async () => {
           rpcCalls++;
-          return { status: "ok" };
+          return rpcResult;
         },
       }),
     },
@@ -109,7 +110,12 @@ test("OpenCode 2 TUI probes through the connected server RPC", async () => {
   } as unknown as Plugin.Context;
 
   const cleanup = await plugin.setup(context);
-  assert.deepEqual(await monitorOptions?.probe(), { status: "ok" });
+  const probe = monitorOptions?.probe;
+  if (!probe) assert.fail("expected quota probe");
+  assert.deepEqual(await probe(), { status: "ok" });
   assert.equal(rpcCalls, 1);
+
+  rpcResult = { status: "ok", used: { primary: "invalid", secondary: 0 } };
+  await assert.rejects(probe);
   await cleanup?.();
 });

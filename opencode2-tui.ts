@@ -4,7 +4,7 @@ import {
   type QuotaMonitor,
   type QuotaMonitorOptions,
 } from "./lib/codex-usage-monitor.js";
-import type { ProbeSnapshot } from "./lib/codex-usage-probe.js";
+import { ProbeSnapshotSchema, type ProbeSnapshot } from "./lib/codex-usage-probe.js";
 import { resolveSignalPath } from "./lib/codex-usage-signal.js";
 import { CODEX_USAGE_RPC } from "./lib/opencode2-rpc.js";
 import {
@@ -27,7 +27,7 @@ export const createOpenCode2TuiPlugin = (
         probe ??
         (async () => {
           const snapshot = await ctx.client.rpc(CODEX_USAGE_RPC).usage({});
-          return snapshot as ProbeSnapshot;
+          return ProbeSnapshotSchema.parse(snapshot);
         });
       const monitor = createMonitor({
         probe: quotaProbe,
