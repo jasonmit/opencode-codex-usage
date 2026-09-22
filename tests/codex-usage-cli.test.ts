@@ -4,6 +4,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse } from "jsonc-parser";
+import { z } from "zod";
 import {
   parseCliOptions,
   resolvePluginInstallPath,
@@ -11,14 +13,12 @@ import {
 } from "#lib/codex-usage-cli.js";
 import { test } from "./test.ts";
 
-const parseJsonc = (content: string): unknown => {
-  return JSON.parse(
-    content
-      .replace(/^\s*\/\/.*$/gm, "")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/,\s*([}\]])/g, "$1"),
-  );
-};
+const singularPluginConfigSchema = z.object({ plugin: z.array(z.string()) });
+const pluralPluginConfigSchema = z.object({ plugins: z.array(z.string()) });
+const nestedPluginConfigSchema = z.object({
+  plugins: z.array(z.string()),
+  nested: z.object({ plugins: z.array(z.string()) }),
+});
 
 test("parseCliOptions defaults to OpenCode 2", () => {
   assert.equal(parseCliOptions([]).opencodeVersion, 2);
@@ -218,11 +218,15 @@ test("OpenCode 1 install and uninstall preserve singular plugin behavior", async
       configPath,
     ]);
     assert.deepEqual(
-      (parseJsonc(await readFile(configPath, "utf8")) as { plugin: string[] }).plugin,
+      singularPluginConfigSchema.parse(
+        parse(await readFile(configPath, "utf8"), undefined, { allowTrailingComma: true }),
+      ).plugin,
       [pluginPath],
     );
     assert.deepEqual(
-      (parseJsonc(await readFile(tuiConfigPath, "utf8")) as { plugin: string[] }).plugin,
+      singularPluginConfigSchema.parse(
+        parse(await readFile(tuiConfigPath, "utf8"), undefined, { allowTrailingComma: true }),
+      ).plugin,
       [pluginPath],
     );
 
@@ -235,11 +239,15 @@ test("OpenCode 1 install and uninstall preserve singular plugin behavior", async
       configPath,
     ]);
     assert.deepEqual(
-      (parseJsonc(await readFile(configPath, "utf8")) as { plugin: string[] }).plugin,
+      singularPluginConfigSchema.parse(
+        parse(await readFile(configPath, "utf8"), undefined, { allowTrailingComma: true }),
+      ).plugin,
       [],
     );
     assert.deepEqual(
-      (parseJsonc(await readFile(tuiConfigPath, "utf8")) as { plugin: string[] }).plugin,
+      singularPluginConfigSchema.parse(
+        parse(await readFile(tuiConfigPath, "utf8"), undefined, { allowTrailingComma: true }),
+      ).plugin,
       [],
     );
   } finally {
@@ -318,7 +326,9 @@ test("OpenCode 2 installer ignores commented plugin examples", async () => {
       configPath,
     ]);
     assert.deepEqual(
-      (parseJsonc(await readFile(configPath, "utf8")) as { plugins: string[] }).plugins,
+      pluralPluginConfigSchema.parse(
+        parse(await readFile(configPath, "utf8"), undefined, { allowTrailingComma: true }),
+      ).plugins,
       ["existing", serverPlugin],
     );
 
@@ -331,8 +341,12 @@ test("OpenCode 2 installer ignores commented plugin examples", async () => {
       configPath,
     ]);
     const uninstalled = await readFile(configPath, "utf8");
-    assert.ok(uninstalled.includes(`// ${JSON.stringify(serverPlugin)}`));
-    assert.deepEqual((parseJsonc(uninstalled) as { plugins: string[] }).plugins, ["existing"]);
+    assert.ok(!uninstalled.includes(`// ${JSON.stringify(serverPlugin)}`));
+    assert.deepEqual(
+      pluralPluginConfigSchema.parse(parse(uninstalled, undefined, { allowTrailingComma: true }))
+        .plugins,
+      ["existing"],
+    );
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -363,10 +377,9 @@ test("OpenCode 2 installer adds only a root plugins property", async () => {
       "--config",
       configPath,
     ]);
-    const parsed = parseJsonc(await readFile(configPath, "utf8")) as {
-      plugins: string[];
-      nested: { plugins: string[] };
-    };
+    const parsed = nestedPluginConfigSchema.parse(
+      parse(await readFile(configPath, "utf8"), undefined, { allowTrailingComma: true }),
+    );
     assert.deepEqual(parsed.plugins, [serverPlugin]);
     assert.deepEqual(parsed.nested.plugins, ["nested-entry"]);
   } finally {
@@ -395,6 +408,32 @@ test("OpenCode 2 installer rejects a non-array root plugins property", async () 
       /Command failed/,
     );
     assert.equal(await readFile(configPath, "utf8"), original);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("OpenCode 2 installer rejects malformed JSONC without modifying it", async () => {
+  const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)), "..");
+  const cliPath = path.join(projectRoot, "dist", "bin", "opencode-codex-usage.js");
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "opencode-codex-usage-malformed-"));
+  const configPath = path.join(tempDir, "opencode.jsonc");
+  const cliConfigPath = resolveTuiConfigPath(configPath, 2);
+  const malformed = '{\n  "plugins": [],\n  "broken":\n}\n';
+
+  try {
+    await writeFile(configPath, malformed, "utf8");
+    await writeFile(cliConfigPath, "{}\n", "utf8");
+    assert.throws(
+      () =>
+        execFileSync(
+          process.execPath,
+          [cliPath, "--install", "--opencode", "2", "--config", configPath],
+          { stdio: "pipe" },
+        ),
+      /Command failed/,
+    );
+    assert.equal(await readFile(configPath, "utf8"), malformed);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
