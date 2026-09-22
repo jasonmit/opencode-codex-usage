@@ -30,18 +30,47 @@ Choose the OpenAI/ChatGPT plan option, then install this quota plugin.
 
 ```bash
 npm install -g opencode-codex-usage
-opencode-codex-usage --install
+opencode-codex-usage --install --opencode 2
 ```
 
+Use `--opencode 1` instead for OpenCode 1. OpenCode 1 remains the default when the flag is omitted.
 Then restart OpenCode.
 
 ### Option B: run with npx (no global install)
 
 ```bash
-npx opencode-codex-usage --install
+npx opencode-codex-usage --install --opencode 2
 ```
 
 Then restart OpenCode.
+
+### OpenCode 2 configuration
+
+The installer adds the packaged server wrapper directory to
+`~/.config/opencode2/opencode.jsonc`:
+
+```jsonc
+{
+  "plugins": ["<install-root>/opencode2-plugin"],
+}
+```
+
+It adds the packaged TUI wrapper directory to the global
+`~/.config/opencode2/cli.json`:
+
+```json
+{
+  "plugins": ["<install-root>/opencode2-tui-plugin"]
+}
+```
+
+Keep existing entries in both arrays. npm plugin config accepts package names, not package
+subpath exports, while local plugin config requires directories. The wrappers bridge those
+rules to the public `./opencode2` and `./opencode2/tui` exports. Those exports use OpenCode 2's
+official server and TUI APIs and release subscriptions, timers, and registrations during cleanup.
+
+Version selection is explicit: the installer does not infer the host version from config
+contents. This allows OpenCode 1 and isolated OpenCode 2 configurations to coexist.
 
 ### Option C: local repo (development)
 
@@ -56,18 +85,21 @@ npm run build
 
 ```bash
 npm link
-opencode-codex-usage --install
+opencode-codex-usage --install --opencode 2
 ```
 
 3. Restart OpenCode.
 
-Manual plugin path (if you prefer editing config directly):
+For manual OpenCode 2 configuration, use the installed wrapper directories shown above.
+For programmatic imports, the corresponding public package exports are:
 
 ```json
-"<repo>"
+"opencode-codex-usage/opencode2"
+"opencode-codex-usage/opencode2/tui"
 ```
 
-Add that path to both OpenCode's server plugin config and TUI plugin config.
+For OpenCode 1, add the local repository root (`"<repo>"`) to singular `plugin`
+arrays in both `opencode.jsonc` and `tui.json`.
 
 ## Upgrading to 1.0.0
 
@@ -95,7 +127,7 @@ opencode-codex-usage --install
 
 Then restart OpenCode.
 
-The installer updates both OpenCode's server plugin config and TUI plugin config. The `/codex-usage` command is now registered by the TUI plugin, while background quota checks remain in the server plugin.
+The OpenCode 1 installer updates both the server plugin config and TUI plugin config. The `/codex-usage` command is registered by the TUI plugin, while background quota checks remain available through the shared monitor.
 
 ## CLI commands
 
@@ -129,6 +161,7 @@ Flags for `opencode-codex-usage`:
 - `--install` - update OpenCode server config and TUI config with the plugin path.
 - `--uninstall` - remove the plugin path from OpenCode server config and TUI config.
 - `--config <path>` - with `--install`/`--uninstall`, use a non-default OpenCode config path.
+- `--opencode <1|2>` - select config format and entrypoints. Defaults to `1`.
 - On error, JSON is written to stderr and the process exits non-zero.
 
 Remove global install:

@@ -28,6 +28,8 @@
   "exports": {
     ".": "./dist/index.js",
     "./server": "./dist/index.js",
+    "./opencode2": "./dist/opencode2.js",
+    "./opencode2/tui": "./dist/opencode2-tui.js",
     "./tui": "./dist/tui.js"
   },
   "imports": {
@@ -40,8 +42,12 @@
   "files": [
     "dist/bin/**/*.js",
     "dist/index.js",
+    "dist/opencode2.js",
+    "dist/opencode2-tui.js",
     "dist/tui.js",
     "dist/lib/**/*.js",
+    "opencode2-plugin",
+    "opencode2-tui-plugin",
     "README.md"
   ],
   "scripts": {
@@ -64,6 +70,8 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
+    "@opencode/plugin": "2.0.12",
+    "solid-js": "1.9.15",
     "zod": "^4.4.3"
   }
 }

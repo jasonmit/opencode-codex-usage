@@ -1,6 +1,6 @@
-import { statSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { createQuotaMonitor } from "./codex-usage-monitor.js";
 import { probeQuota, type ProbeSnapshot } from "./codex-usage-probe.js";
 import { statusState } from "./quota-format.js";
 import { resolveSignalPath } from "./codex-usage-signal.js";
@@ -202,11 +202,6 @@ type PluginContext = {
   client: Client;
   worktree: string;
   probeQuota?: typeof probeQuota;
-};
-
-type ProbeRunResult = {
-  failed: boolean;
-  detail?: string;
 };
 
 export const isCodexUsageCommand = (name: string | undefined): boolean => {
@@ -453,48 +448,11 @@ export const resolveToastDurationMs = (
 export const CodexQuotaToastPlugin = (context: PluginContext) => {
   const { client, worktree } = context;
   const quotaProbe = context.probeQuota ?? probeQuota;
-  const pollMs = resolvePollMs();
-  const toastThreshold = resolveToastThreshold();
-  const toastDurationMs = resolveToastDurationMs();
-  const forceStartupToast = toastThreshold === "always";
-
-  let running = false;
-  let pendingForce = false;
   let started = false;
-  let lastBackgroundStatus: QuotaStatusState | undefined;
   let sessionModel: string | undefined;
-  let pollTimer: ReturnType<typeof setInterval> | undefined;
-  let triggerTimer: ReturnType<typeof setInterval> | undefined;
   const signalPath = resolveSignalPath();
   const signalPathNormalized = signalPath.replace(/\\/g, "/");
   const signalBasename = path.posix.basename(signalPathNormalized);
-  let signalRevision = 0;
-
-  const logPluginError = async (message: string, extra: Record<string, unknown>): Promise<void> => {
-    if (!client.app?.log) return;
-
-    try {
-      await client.app.log({
-        body: {
-          service: "opencode-codex-usage",
-          level: "error",
-          message,
-          extra,
-        },
-      });
-    } catch {
-      // Avoid recursive logging failures.
-    }
-  };
-
-  const reportAsyncFailure = (scope: string, error: unknown): void => {
-    const detail = error instanceof Error ? error.message : String(error);
-    void logPluginError("plugin async failure", { scope, detail, worktree });
-  };
-
-  const triggerStartupProbe = (): void => {
-    runProbeSafely({ force: forceStartupToast, showFailureToast: false });
-  };
 
   const isSignalFile = (filePath: string | undefined): boolean => {
     const normalized = (filePath ?? "").replace(/\\/g, "/");
@@ -504,161 +462,47 @@ export const CodexQuotaToastPlugin = (context: PluginContext) => {
       normalized.endsWith(`/${signalBasename}`)
     );
   };
-
-  const runProbe = async ({
-    force = false,
-    showFailureToast = false,
-  }: { force?: boolean; showFailureToast?: boolean } = {}): Promise<ProbeRunResult> => {
-    if (running) {
-      if (force) pendingForce = true;
-      return { failed: false };
-    }
-
-    running = true;
-
-    try {
-      const parsed = await quotaProbe({ model: sessionModel });
-      const probeError = parsed.error?.trim();
-      if (probeError) {
-        await logPluginError("quota probe failed", { detail: probeError, worktree });
-        if (showFailureToast) {
-          await client.tui.showToast({
-            body: {
-              title: "Codex quota 🚨",
-              message: `🚨 Quota error | ${probeError}`,
-              variant: "error",
-              duration: toastDurationMs,
-            },
-          });
-        }
-        return { failed: true, detail: probeError };
-      }
-
-      const normalizedStatus = statusStateNormalized(parsed.status);
-      if (!force) {
-        const shouldToastByThreshold = shouldToastForBackground(parsed.status, toastThreshold);
-        const shouldToastByTransition = shouldToastForBackgroundTransition(
-          normalizedStatus,
-          lastBackgroundStatus,
-        );
-        lastBackgroundStatus = normalizedStatus;
-        if (!shouldToastByThreshold || !shouldToastByTransition) {
-          return { failed: false };
-        }
-      } else {
-        lastBackgroundStatus = normalizedStatus;
-      }
-
-      await client.tui.showToast({
-        body: toastBodyFromParsed(parsed, toastDurationMs),
-      });
-      return { failed: false };
-    } catch (error: unknown) {
-      const detail = error instanceof Error ? error.message : String(error);
-      await logPluginError("quota probe failed", { detail, worktree });
-      if (showFailureToast) {
-        await client.tui.showToast({
+  const monitor = createQuotaMonitor({
+    probe: () => quotaProbe({ model: sessionModel }),
+    notify: (body) => client.tui.showToast({ body }),
+    logError: async (message, detail) => {
+      if (!client.app?.log) return;
+      try {
+        await client.app.log({
           body: {
-            title: "Codex quota 🚨",
-            message: `🚨 Quota error | ${detail}`,
-            variant: "error",
-            duration: toastDurationMs,
+            service: "opencode-codex-usage",
+            level: "error",
+            message,
+            extra: { detail, worktree },
           },
         });
+      } catch {
+        // Avoid recursive logging failures.
       }
-      return { failed: true, detail };
-    } finally {
-      running = false;
+    },
+    pollMs: resolvePollMs(),
+    threshold: resolveToastThreshold(),
+    durationMs: resolveToastDurationMs(),
+    signalPath,
+    signalWatchMs: SIGNAL_WATCH_MS,
+  });
 
-      if (pendingForce) {
-        pendingForce = false;
-        void runProbe({ force: true, showFailureToast: false });
-      }
-    }
-  };
-
-  const runProbeSafely = ({
-    force = false,
-    showFailureToast = false,
-  }: { force?: boolean; showFailureToast?: boolean } = {}): void => {
-    runProbe({ force, showFailureToast }).catch((error: unknown) => {
-      reportAsyncFailure("runProbe", error);
-    });
-  };
-
-  const signalMtime = (filePath: string): number => {
-    try {
-      return statSync(filePath, { throwIfNoEntry: false })?.mtimeMs ?? 0;
-    } catch {
-      return 0;
-    }
-  };
-
-  const readSignalRevision = (): number => {
-    return signalMtime(signalPath);
-  };
-
-  const startSignalWatch = (): void => {
-    if (triggerTimer) return;
-    signalRevision = readSignalRevision();
-    triggerTimer = setInterval(() => {
-      const revision = readSignalRevision();
-      if (revision <= signalRevision) return;
-      signalRevision = revision;
-      runProbeSafely({ force: true, showFailureToast: false });
-    }, SIGNAL_WATCH_MS);
-  };
-
-  const stopSignalWatch = (): void => {
-    if (!triggerTimer) return;
-    clearInterval(triggerTimer);
-    triggerTimer = undefined;
-  };
-
-  const startPolling = (): void => {
-    if (pollTimer) return;
-    pollTimer = setInterval(() => {
-      runProbeSafely({ showFailureToast: false });
-    }, pollMs);
-  };
-
-  const startBackgroundWorkers = (): void => {
-    startPolling();
-    startSignalWatch();
-    triggerStartupProbe();
-  };
-
-  const stopPolling = (): void => {
-    if (!pollTimer) return;
-    clearInterval(pollTimer);
-    pollTimer = undefined;
-  };
-
-  const stopBackgroundWorkers = (): void => {
-    stopPolling();
-    stopSignalWatch();
-  };
-
-  const restartBackgroundWorkers = (): void => {
-    started = true;
-    stopBackgroundWorkers();
-    startBackgroundWorkers();
-  };
-
-  const ensureBackgroundWorkersStarted = (): void => {
+  const start = (): void => {
     if (started) return;
     started = true;
-    startBackgroundWorkers();
+    monitor.start();
   };
-
-  const stopBackgroundWorkersAndReset = (): void => {
+  const stop = (): void => {
     started = false;
-    lastBackgroundStatus = undefined;
-    sessionModel = undefined;
-    stopBackgroundWorkers();
+    monitor.stop();
+  };
+  const restart = (): void => {
+    started = false;
+    monitor.stop({ resetStatus: false });
+    start();
   };
 
-  ensureBackgroundWorkersStarted();
+  start();
 
   return {
     tool: {
@@ -687,17 +531,18 @@ export const CodexQuotaToastPlugin = (context: PluginContext) => {
       }
 
       if (isSessionCreatedEvent(event.type)) {
-        restartBackgroundWorkers();
+        restart();
         return;
       }
 
       if (isSessionActivityEvent(event.type)) {
-        ensureBackgroundWorkersStarted();
+        start();
         return;
       }
 
       if (isSessionDeletedEvent(event.type)) {
-        stopBackgroundWorkersAndReset();
+        sessionModel = undefined;
+        stop();
         return;
       }
 
@@ -707,11 +552,11 @@ export const CodexQuotaToastPlugin = (context: PluginContext) => {
           stringFromUnknown(event.properties?.file) ?? stringFromUnknown(event.properties?.path),
         )
       ) {
-        runProbeSafely({ force: true, showFailureToast: false });
+        void monitor.refresh({ force: true });
       }
     },
     dispose: () => {
-      stopBackgroundWorkers();
+      stop();
     },
   };
 };
