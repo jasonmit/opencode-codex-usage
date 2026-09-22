@@ -20,6 +20,10 @@ const parseJsonc = (content: string): unknown => {
   );
 };
 
+test("parseCliOptions defaults to OpenCode 2", () => {
+  assert.equal(parseCliOptions([]).opencodeVersion, 2);
+});
+
 test("parseCliOptions uses silent-json defaults", () => {
   assert.deepEqual(parseCliOptions([]), {
     help: false,
@@ -30,7 +34,7 @@ test("parseCliOptions uses silent-json defaults", () => {
     install: false,
     uninstall: false,
     configPath: undefined,
-    opencodeVersion: 1,
+    opencodeVersion: 2,
   });
 });
 
@@ -44,7 +48,7 @@ test("parseCliOptions recognizes output and notify flags", () => {
     install: false,
     uninstall: false,
     configPath: undefined,
-    opencodeVersion: 1,
+    opencodeVersion: 2,
   });
   assert.deepEqual(parseCliOptions(["--json"]), {
     help: false,
@@ -55,7 +59,7 @@ test("parseCliOptions recognizes output and notify flags", () => {
     install: false,
     uninstall: false,
     configPath: undefined,
-    opencodeVersion: 1,
+    opencodeVersion: 2,
   });
 });
 
@@ -69,7 +73,7 @@ test("parseCliOptions recognizes pretty output flag", () => {
     install: false,
     uninstall: false,
     configPath: undefined,
-    opencodeVersion: 1,
+    opencodeVersion: 2,
   });
 });
 
@@ -83,7 +87,7 @@ test("parseCliOptions recognizes install and setup alias flags", () => {
     install: true,
     uninstall: false,
     configPath: undefined,
-    opencodeVersion: 1,
+    opencodeVersion: 2,
   });
   assert.deepEqual(parseCliOptions(["--setup"]), {
     help: false,
@@ -94,7 +98,7 @@ test("parseCliOptions recognizes install and setup alias flags", () => {
     install: true,
     uninstall: false,
     configPath: undefined,
-    opencodeVersion: 1,
+    opencodeVersion: 2,
   });
 });
 
@@ -108,7 +112,7 @@ test("parseCliOptions recognizes uninstall flag", () => {
     install: false,
     uninstall: true,
     configPath: undefined,
-    opencodeVersion: 1,
+    opencodeVersion: 2,
   });
 });
 
@@ -183,9 +187,11 @@ test("install reports one summary when server and TUI plugins are already config
     await writeFile(configPath, config, "utf8");
     await writeFile(resolveTuiConfigPath(configPath), config, "utf8");
 
-    const stdout = execFileSync(process.execPath, [cliPath, "--install", "--config", configPath], {
-      encoding: "utf8",
-    });
+    const stdout = execFileSync(
+      process.execPath,
+      [cliPath, "--install", "--opencode", "1", "--config", configPath],
+      { encoding: "utf8" },
+    );
 
     assert.equal(stdout, "No changes needed. Server and TUI plugins are already configured.\n");
   } finally {
@@ -203,7 +209,14 @@ test("OpenCode 1 install and uninstall preserve singular plugin behavior", async
 
   try {
     await writeFile(configPath, "{}\n", "utf8");
-    execFileSync(process.execPath, [cliPath, "--install", "--config", configPath]);
+    execFileSync(process.execPath, [
+      cliPath,
+      "--install",
+      "--opencode",
+      "1",
+      "--config",
+      configPath,
+    ]);
     assert.deepEqual(
       (parseJsonc(await readFile(configPath, "utf8")) as { plugin: string[] }).plugin,
       [pluginPath],
@@ -213,7 +226,14 @@ test("OpenCode 1 install and uninstall preserve singular plugin behavior", async
       [pluginPath],
     );
 
-    execFileSync(process.execPath, [cliPath, "--uninstall", "--config", configPath]);
+    execFileSync(process.execPath, [
+      cliPath,
+      "--uninstall",
+      "--opencode",
+      "1",
+      "--config",
+      configPath,
+    ]);
     assert.deepEqual(
       (parseJsonc(await readFile(configPath, "utf8")) as { plugin: string[] }).plugin,
       [],
@@ -227,7 +247,7 @@ test("OpenCode 1 install and uninstall preserve singular plugin behavior", async
   }
 });
 
-test("OpenCode 2 install and uninstall use official package entrypoints", async () => {
+test("default OpenCode 2 install and uninstall use official package entrypoints", async () => {
   const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)), "..");
   const cliPath = path.join(projectRoot, "dist", "bin", "opencode-codex-usage.js");
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "opencode-codex-usage-v2-"));
@@ -241,11 +261,9 @@ test("OpenCode 2 install and uninstall use official package entrypoints", async 
     await writeFile(configPath, '{\n  "plugins": ["existing-server"]\n}\n', "utf8");
     await writeFile(cliConfigPath, '{\n  "plugins": ["existing-tui"]\n}\n', "utf8");
 
-    execFileSync(
-      process.execPath,
-      [cliPath, "--install", "--opencode", "2", "--config", configPath],
-      { encoding: "utf8" },
-    );
+    execFileSync(process.execPath, [cliPath, "--install", "--config", configPath], {
+      encoding: "utf8",
+    });
     assert.deepEqual(JSON.parse(await readFile(configPath, "utf8")).plugins, [
       "existing-server",
       serverPlugin,
@@ -262,11 +280,9 @@ test("OpenCode 2 install and uninstall use official package entrypoints", async 
     );
     assert.equal(unchanged, "No changes needed. Server and TUI plugins are already configured.\n");
 
-    execFileSync(
-      process.execPath,
-      [cliPath, "--uninstall", "--opencode", "2", "--config", configPath],
-      { encoding: "utf8" },
-    );
+    execFileSync(process.execPath, [cliPath, "--uninstall", "--config", configPath], {
+      encoding: "utf8",
+    });
     assert.deepEqual(JSON.parse(await readFile(configPath, "utf8")).plugins, ["existing-server"]);
     assert.deepEqual(JSON.parse(await readFile(cliConfigPath, "utf8")).plugins, ["existing-tui"]);
   } finally {

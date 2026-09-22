@@ -33,12 +33,12 @@ const helpText = () => {
     "  --install         Add plugin path to OpenCode config",
     "  --uninstall       Remove plugin path from OpenCode config",
     "  --config <path>   Config file path to use with --install/--uninstall",
-    "  --opencode <1|2>  OpenCode config version (default: 1)",
+    "  --opencode <1|2>  OpenCode config version (default: 2)",
     "",
     "Examples:",
     "  opencode-codex-usage",
     "  opencode-codex-usage --json",
-    "  opencode-codex-usage --install --config ~/.config/opencode/opencode.jsonc",
+    "  opencode-codex-usage --install",
     "  opencode-codex-usage --uninstall",
   ].join("\n");
 };
@@ -583,7 +583,7 @@ export const parseCliOptions = (argv: string[]): CliOptions => {
   let install = false;
   let uninstall = false;
   let configPath: string | undefined;
-  let opencodeVersion: 1 | 2 = 1;
+  let opencodeVersion: 1 | 2 = 2;
 
   for (let idx = 0; idx < argv.length; idx += 1) {
     const arg = argv[idx] ?? "";
