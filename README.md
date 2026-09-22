@@ -1,281 +1,110 @@
 # opencode-codex-usage
 
-Small OpenCode plugin for Codex quota visibility.
-
-Instead of checking the web dashboard, you get quota toasts directly in OpenCode.
-
-## Screenshot
+Check your Codex quota without leaving OpenCode. Ask the assistant, run `/codex-usage`, or get automatic quota alerts.
 
 <img src="screenshot.png" alt="Codex quota toast in OpenCode" />
 
-## What it does
+## Install
 
-- Shows Codex quota status as OpenCode toasts.
-- Registers a `codex_usage` tool so the assistant can answer Codex quota and reset questions.
-- Runs a background check on startup and every 10 minutes.
-- Keeps noise low: background checks only notify when quota reaches the configured threshold (`warn` by default, so `warn`/`critical`/`error`).
-- Includes JSON output mode for scripts and debugging.
-
-## Quick start
-
-Prerequisite: connect OpenCode to your ChatGPT Plus/Pro plan using OpenCode's native provider setup:
-
-```text
-/connect
-```
-
-Choose the OpenAI/ChatGPT plan option, then install this quota plugin.
-
-### Option A: install from npm (recommended)
+First, use `/connect` in OpenCode to connect your ChatGPT plan through the OpenAI/ChatGPT option. Then:
 
 ```bash
 npm install -g opencode-codex-usage
 opencode-codex-usage --install
 ```
 
-OpenCode 2 is the default. Use `--opencode 1` only for legacy OpenCode 1 installations.
-Then restart OpenCode.
+Restart OpenCode. The installer configures both the server and TUI plugins for **OpenCode 2**.
 
-### Option B: run with npx (no global install)
+## Check your usage
+
+**Ask the assistant:**
+
+> How much Codex usage do I have left?
+>
+> When does my Codex quota reset?
+
+The plugin provides a `codex_usage` tool that the assistant can call to check your connected account's quota and reset times. Questions about “ChatGPT usage” also invoke this check, but the results are **Codex quota**, not general ChatGPT message limits or OpenAI API billing.
+
+**Get a quick toast:**
+
+```text
+/codex-usage
+```
+
+This checks usage directly, without an assistant turn.
+
+**Automatic alerts:** the plugin checks on startup and every 10 minutes. By default, it only shows a toast when quota status reaches a warning or worse and worsens from the previous check.
+
+## From the terminal
 
 ```bash
-npx opencode-codex-usage --install
+opencode-codex-usage --pretty  # Readable usage bars
+opencode-codex-usage --json    # JSON for scripts
+opencode-codex-usage --help    # All options
 ```
 
-Then restart OpenCode.
+## Settings & troubleshooting
 
-### OpenCode 2 configuration
+Authentication is managed by OpenCode. If you see `provided authorization token is expired`, use `/connect` to reconnect your ChatGPT account.
 
-The installer adds the packaged server wrapper directory to
-`~/.config/opencode2/opencode.jsonc`:
+<details>
+<summary>Optional settings</summary>
 
-```jsonc
-{
-  "plugins": ["<install-root>/opencode2-plugin"],
-}
-```
+Set environment variables before starting OpenCode:
 
-It adds the packaged TUI wrapper directory to the global
-`~/.config/opencode2/cli.json`:
+| Variable                                 | Default       | Purpose                                                            |
+| ---------------------------------------- | ------------- | ------------------------------------------------------------------ |
+| `OPENCODE_CODEX_QUOTA_POLL_MS`           | `600000`      | Background check interval in milliseconds                          |
+| `OPENCODE_CODEX_QUOTA_TOAST_THRESHOLD`   | `warn`        | Alert threshold: `warn`, `critical`, `error`, `always`, or `never` |
+| `OPENCODE_CODEX_QUOTA_TOAST_DURATION_MS` | `5000`        | Toast duration in milliseconds                                     |
+| `OPENCODE_CODEX_QUOTA_RETRY_COUNT`       | `1`           | Transient failure retries (`0`–`2`)                                |
+| `OPENCODE_CODEX_QUOTA_MODEL`             | Auto-detected | Override the probe model                                           |
 
-```json
-{
-  "plugins": ["<install-root>/opencode2-tui-plugin"]
-}
-```
-
-Keep existing entries in both arrays. npm plugin config accepts package names, not package
-subpath exports, while local plugin config requires directories. The wrappers bridge those
-rules to the public `./opencode2` and `./opencode2/tui` exports. Those exports use OpenCode 2's
-official server and TUI APIs and release subscriptions, timers, and registrations during cleanup.
-
-The installer does not infer the host version from config contents. It defaults to OpenCode 2;
-pass `--opencode 1` explicitly to manage a legacy OpenCode 1 configuration. This allows both
-configurations to coexist.
-
-### Option C: local repo (development)
-
-1. Build:
+For example, to show only critical alerts:
 
 ```bash
-npm install
-npm run build
+OPENCODE_CODEX_QUOTA_TOAST_THRESHOLD=critical opencode
 ```
 
-2. Link and auto-configure OpenCode:
+</details>
 
-```bash
-npm link
-opencode-codex-usage --install
-```
+<details>
+<summary>Upgrade, uninstall, or use OpenCode 1</summary>
 
-3. Restart OpenCode.
-
-For manual OpenCode 2 configuration, use the installed wrapper directories shown above.
-For programmatic imports, the corresponding public package exports are:
-
-```json
-"opencode-codex-usage/opencode2"
-"opencode-codex-usage/opencode2/tui"
-```
-
-## Upgrading to OpenCode 2
-
-OpenCode 2 is the default in this major version. Upgrade the package and run the installer again:
+To upgrade:
 
 ```bash
 npm install -g opencode-codex-usage@latest
 opencode-codex-usage --install
 ```
 
-This configures the OpenCode 2 server and TUI plugins without changing an existing OpenCode 1
-configuration. Restart OpenCode after installation. To continue managing OpenCode 1 instead, pass
-`--opencode 1` explicitly.
-
-## Legacy OpenCode 1
-
-OpenCode 1 remains supported through an explicit version flag:
+To remove the plugin and package:
 
 ```bash
-opencode-codex-usage --install --opencode 1
-```
-
-This updates the singular `plugin` arrays in `~/.config/opencode/opencode.jsonc` and
-`~/.config/opencode/tui.json`. For manual local configuration, add the repository root to both
-arrays. Use `--uninstall --opencode 1` to remove those entries.
-
-## CLI commands
-
-The TUI plugin registers a `/codex-usage` slash command.
-This means quota checks run locally and the command shows a toast without an assistant turn.
-
-The server plugin also registers a `codex_usage` tool. OpenCode can call it during an assistant
-turn when you ask questions such as "How much Codex usage do I have left?" or "When does my
-Codex quota reset?" Asking about "ChatGPT usage" also invokes the probe. The tool reports Codex
-quota for the connected ChatGPT plan; it does not report general ChatGPT message limits or
-OpenAI API billing.
-
-You can still run `opencode-codex-usage` directly when you want an immediate quota refresh from a shell.
-
-After install verify end-to-end:
-
-```bash
-OPENCODE_CODEX_QUOTA_TOAST_THRESHOLD=always opencode
-/codex-usage
-```
-
-Use `/codex-usage` or `opencode-codex-usage` to verify the end-to-end toast flow immediately (no agent invocation).
-
-Flags for `opencode-codex-usage`:
-
-- `-h` or `--help` - show CLI usage and available flags.
-- `--json` or `--verbose` - print JSON snapshot to stdout on success.
-- `--pretty` - show a human-friendly quota view with ASCII usage bars.
-- `--no-notify` - skip the refresh notification step.
-- `--retry <count>` - retry transient probe failures (`0-2`). Overrides env for current run.
-- `--install` - update OpenCode server config and TUI config with the plugin path.
-- `--uninstall` - remove the plugin path from OpenCode server config and TUI config.
-- `--config <path>` - with `--install`/`--uninstall`, use a non-default OpenCode config path.
-- `--opencode <1|2>` - select config format and entrypoints. Defaults to `2`.
-- On error, JSON is written to stderr and the process exits non-zero.
-
-Remove global install:
-
-```bash
+opencode-codex-usage --uninstall
 npm uninstall -g opencode-codex-usage
 ```
 
-Remove local link:
+Restart OpenCode after changing the installation.
 
-```bash
-npm unlink -g opencode-codex-usage
-```
+For legacy OpenCode 1, add `--opencode 1` to the install or uninstall command. The installer defaults to OpenCode 2 and leaves existing OpenCode 1 configuration alone.
 
-## Behavior
-
-- Background checks run on startup and on interval.
-- Background checks trigger a toast only when status meets the configured threshold and gets worse than the previous background state.
-- Manual runs can trigger an immediate refresh from any folder.
-- Window labels use API-provided window minutes when available (for example `5h window`, `7d window`), otherwise fallback to `window A` / `window B`.
-
-## Configuration
-
-Authentication is handled by OpenCode. Use `/connect` in OpenCode to connect a ChatGPT Plus/Pro plan before running quota checks.
-
-If the probe reports `provided authorization token is expired`, run `/connect` and reconnect your ChatGPT account.
-
-Set polling interval (milliseconds):
-
-```bash
-OPENCODE_CODEX_QUOTA_POLL_MS=120000
-```
-
-Default is `600000` (10 minutes). Invalid or non-positive values fall back to default.
-
-Set transient retry count for probe failures:
-
-```bash
-OPENCODE_CODEX_QUOTA_RETRY_COUNT=1
-```
-
-Allowed values: `0`, `1` (default), `2`. Values above `2` clamp to `2`; invalid values fall back to default.
-
-Set probe model (advanced; optional):
-
-```bash
-OPENCODE_CODEX_QUOTA_MODEL=gpt-5.5
-```
-
-By default, the probe queries the authenticated Codex model list and uses the first supported model returned for the account.
-
-Advanced: override the internal refresh path (optional):
-
-```bash
-OPENCODE_CODEX_USAGE_SIGNAL_PATH=/tmp/opencode-codex-usage.refresh
-```
-
-Set background toast threshold:
-
-```bash
-OPENCODE_CODEX_QUOTA_TOAST_THRESHOLD=critical
-```
-
-Allowed values: `warn` (default), `critical`, `error`, `always`, `never`.
-
-Set toast duration (milliseconds):
-
-```bash
-OPENCODE_CODEX_QUOTA_TOAST_DURATION_MS=5000
-```
-
-Default is `5000`. Invalid or non-positive values fall back to default.
-
-## Probe output
-
-The probe prints one JSON object (`ProbeSnapshot`) per run.
-
-Common keys:
-
-- `status` (for example `ok`, `warn`, `error`)
-- `statusCode` (for example `200`, `500`, `auth`, `network`, `timeout`)
-- `used` (`primary`/`secondary` percent)
-- `reset` (`primary`/`secondary` reset duration)
-- `windowMinutes` (`primary`/`secondary` window length in minutes, when available)
-- `plan`, `profile`, `probeTokens`, `error`
-
-Error `statusCode` values:
-
-- `auth` for auth-path/token issues
-- `network` for transport failures
-- `timeout` for request timeout
-- numeric HTTP status codes for server responses
-
-Example:
-
-```json
-{
-  "status": "warn",
-  "statusCode": 200,
-  "plan": "plus",
-  "profile": "default",
-  "used": { "primary": 81, "secondary": 9 },
-  "reset": { "primary": "1h0m", "secondary": "7d0h" },
-  "windowMinutes": { "primary": 300, "secondary": 10080 },
-  "probeTokens": 10
-}
-```
+</details>
 
 ## Development
+
+```bash
+npm install
+npm run build
+npm link
+opencode-codex-usage --install
+```
+
+Restart OpenCode to load the local plugin. Before submitting changes:
 
 ```bash
 npm test
 npm run lint
 npm run build
 npm run format:check
-```
-
-Auto-configure OpenCode with local plugin path:
-
-```bash
-opencode-codex-usage --install
 ```
