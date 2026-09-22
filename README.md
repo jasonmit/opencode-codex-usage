@@ -33,6 +33,7 @@ npm install -g opencode-codex-usage
 opencode-codex-usage --install
 ```
 
+OpenCode 2 is the default. Use `--opencode 1` only for legacy OpenCode 1 installations.
 Then restart OpenCode.
 
 ### Option B: run with npx (no global install)
@@ -42,6 +43,35 @@ npx opencode-codex-usage --install
 ```
 
 Then restart OpenCode.
+
+### OpenCode 2 configuration
+
+The installer adds the packaged server wrapper directory to
+`~/.config/opencode2/opencode.jsonc`:
+
+```jsonc
+{
+  "plugins": ["<install-root>/opencode2-plugin"],
+}
+```
+
+It adds the packaged TUI wrapper directory to the global
+`~/.config/opencode2/cli.json`:
+
+```json
+{
+  "plugins": ["<install-root>/opencode2-tui-plugin"]
+}
+```
+
+Keep existing entries in both arrays. npm plugin config accepts package names, not package
+subpath exports, while local plugin config requires directories. The wrappers bridge those
+rules to the public `./opencode2` and `./opencode2/tui` exports. Those exports use OpenCode 2's
+official server and TUI APIs and release subscriptions, timers, and registrations during cleanup.
+
+The installer does not infer the host version from config contents. It defaults to OpenCode 2;
+pass `--opencode 1` explicitly to manage a legacy OpenCode 1 configuration. This allows both
+configurations to coexist.
 
 ### Option C: local repo (development)
 
@@ -61,41 +91,38 @@ opencode-codex-usage --install
 
 3. Restart OpenCode.
 
-Manual plugin path (if you prefer editing config directly):
+For manual OpenCode 2 configuration, use the installed wrapper directories shown above.
+For programmatic imports, the corresponding public package exports are:
 
 ```json
-"<repo>"
+"opencode-codex-usage/opencode2"
+"opencode-codex-usage/opencode2/tui"
 ```
 
-Add that path to both OpenCode's server plugin config and TUI plugin config.
+## Upgrading to OpenCode 2
 
-## Upgrading to 1.0.0
-
-Version 1.0.0 changes the OpenCode integration from a server-only plugin to paired server and TUI plugins.
-This is a breaking setup change if you installed an older version manually or have an old plugin path in config.
-
-Old manual plugin paths are obsolete:
-
-```json
-"<repo>/dist/index.js"
-```
-
-Use the package root instead:
-
-```json
-"<repo>"
-```
-
-Recommended upgrade:
+OpenCode 2 is the default in this major version. Upgrade the package and run the installer again:
 
 ```bash
 npm install -g opencode-codex-usage@latest
 opencode-codex-usage --install
 ```
 
-Then restart OpenCode.
+This configures the OpenCode 2 server and TUI plugins without changing an existing OpenCode 1
+configuration. Restart OpenCode after installation. To continue managing OpenCode 1 instead, pass
+`--opencode 1` explicitly.
 
-The installer updates both OpenCode's server plugin config and TUI plugin config. The `/codex-usage` command is now registered by the TUI plugin, while background quota checks remain in the server plugin.
+## Legacy OpenCode 1
+
+OpenCode 1 remains supported through an explicit version flag:
+
+```bash
+opencode-codex-usage --install --opencode 1
+```
+
+This updates the singular `plugin` arrays in `~/.config/opencode/opencode.jsonc` and
+`~/.config/opencode/tui.json`. For manual local configuration, add the repository root to both
+arrays. Use `--uninstall --opencode 1` to remove those entries.
 
 ## CLI commands
 
@@ -129,6 +156,7 @@ Flags for `opencode-codex-usage`:
 - `--install` - update OpenCode server config and TUI config with the plugin path.
 - `--uninstall` - remove the plugin path from OpenCode server config and TUI config.
 - `--config <path>` - with `--install`/`--uninstall`, use a non-default OpenCode config path.
+- `--opencode <1|2>` - select config format and entrypoints. Defaults to `2`.
 - On error, JSON is written to stderr and the process exits non-zero.
 
 Remove global install:

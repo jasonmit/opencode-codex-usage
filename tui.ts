@@ -1,8 +1,10 @@
 import { appendFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { probeQuota } from "./lib/codex-usage-probe.js";
-import { resolveToastDurationMs, toastBodyFromParsed } from "./lib/codex-usage-toast-plugin.js";
+import { createQuotaMonitor } from "./lib/codex-usage-monitor.js";
+import { probeQuota, type ProbeSnapshot } from "./lib/codex-usage-probe.js";
+import { resolveSignalPath } from "./lib/codex-usage-signal.js";
+import { resolveToastDurationMs } from "./lib/codex-usage-toast-plugin.js";
 
 type TuiToast = {
   title?: string;
@@ -46,9 +48,12 @@ const debugLog = (message: string, extra: Record<string, unknown> = {}): void =>
   void appendFile(debugLogPath, `${line}\n`, "utf8").catch(() => undefined);
 };
 
+export const messageForProbeFailure = (snapshot: ProbeSnapshot): string => {
+  return `🚨 Quota error | ${snapshot.error ?? "unknown probe error"}`;
+};
+
 export const CodexQuotaTuiPlugin = async (api: TuiApi): Promise<void> => {
   const toastDurationMs = resolveToastDurationMs();
-  let running = false;
 
   debugLog("tui plugin loaded", {
     hasCommandRegister: typeof api.command?.register,
@@ -64,41 +69,15 @@ export const CodexQuotaTuiPlugin = async (api: TuiApi): Promise<void> => {
     });
   }
 
-  const showToast = (toast: TuiToast): void => {
-    api.ui.toast(toast);
-  };
-
-  const runProbe = async (): Promise<void> => {
-    debugLog("run probe requested", { running });
-    if (running) return;
-    running = true;
-
-    try {
-      const parsed = await probeQuota();
-      const probeError = parsed.error?.trim();
-      if (probeError) {
-        showToast({
-          title: "Codex quota 🚨",
-          message: `🚨 Quota error | ${probeError}`,
-          variant: "error",
-          duration: toastDurationMs,
-        });
-        return;
-      }
-
-      showToast(toastBodyFromParsed(parsed, toastDurationMs));
-    } catch (error: unknown) {
-      const detail = error instanceof Error ? error.message : String(error);
-      showToast({
-        title: "Codex quota 🚨",
-        message: `🚨 Quota error | ${detail}`,
-        variant: "error",
-        duration: toastDurationMs,
-      });
-    } finally {
-      running = false;
-    }
-  };
+  const monitor = createQuotaMonitor({
+    probe: probeQuota,
+    notify: (toast) => api.ui.toast(toast),
+    logError: (message, detail) => debugLog(message, { detail }),
+    pollMs: 10 * 60 * 1000,
+    threshold: "never",
+    durationMs: toastDurationMs,
+    signalPath: resolveSignalPath(),
+  });
 
   const dispose = api.command.register(() => [
     ...(() => {
@@ -110,7 +89,7 @@ export const CodexQuotaTuiPlugin = async (api: TuiApi): Promise<void> => {
         slash: { name: "codex-usage" },
         onSelect: () => {
           debugLog("command selected");
-          void runProbe();
+          void monitor.refresh({ force: true, showFailure: true });
         },
       };
       debugLog("register callback returned command", {
@@ -124,6 +103,7 @@ export const CodexQuotaTuiPlugin = async (api: TuiApi): Promise<void> => {
 
   api.lifecycle.onDispose(() => {
     debugLog("tui plugin disposed");
+    monitor.stop();
     dispose();
   });
 };

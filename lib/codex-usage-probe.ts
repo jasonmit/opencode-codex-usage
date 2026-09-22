@@ -70,17 +70,35 @@ type WindowPair<T> = {
   secondary: T;
 };
 
-export type ProbeSnapshot = {
-  status: string;
-  statusCode?: number | string;
-  used?: WindowPair<number | null> | string;
-  reset?: WindowPair<string | null> | string;
-  windowMinutes?: WindowPair<number | null> | string;
-  plan?: string;
-  profile?: string;
-  probeTokens?: number;
-  error?: string;
-};
+const NumberWindowPairSchema = z
+  .object({
+    primary: z.number().nullable(),
+    secondary: z.number().nullable(),
+  })
+  .strict();
+
+const StringWindowPairSchema = z
+  .object({
+    primary: z.string().nullable(),
+    secondary: z.string().nullable(),
+  })
+  .strict();
+
+export const ProbeSnapshotSchema = z
+  .object({
+    status: z.string(),
+    statusCode: z.union([z.number(), z.string()]).optional(),
+    used: z.union([NumberWindowPairSchema, z.string()]).optional(),
+    reset: z.union([StringWindowPairSchema, z.string()]).optional(),
+    windowMinutes: z.union([NumberWindowPairSchema, z.string()]).optional(),
+    plan: z.string().optional(),
+    profile: z.string().optional(),
+    probeTokens: z.number().optional(),
+    error: z.string().optional(),
+  })
+  .strict();
+
+export type ProbeSnapshot = z.infer<typeof ProbeSnapshotSchema>;
 
 export type ProbeQuotaOptions = {
   retryCount?: number;
