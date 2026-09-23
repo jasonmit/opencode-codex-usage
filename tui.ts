@@ -2,7 +2,7 @@ import { appendFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createQuotaMonitor } from "./lib/codex-usage-monitor.js";
-import { probeQuota, type ProbeSnapshot } from "./lib/codex-usage-probe.js";
+import { probeQuota } from "./lib/codex-usage-probe.js";
 import { resolveSignalPath } from "./lib/codex-usage-signal.js";
 import { resolveToastDurationMs } from "./lib/codex-usage-toast-plugin.js";
 
@@ -46,10 +46,6 @@ const debugLog = (message: string, extra: Record<string, unknown> = {}): void =>
   if (!debugEnabled()) return;
   const line = JSON.stringify({ time: new Date().toISOString(), message, ...extra });
   void appendFile(debugLogPath, `${line}\n`, "utf8").catch(() => undefined);
-};
-
-export const messageForProbeFailure = (snapshot: ProbeSnapshot): string => {
-  return `🚨 Quota error | ${snapshot.error ?? "unknown probe error"}`;
 };
 
 export const CodexQuotaTuiPlugin = async (api: TuiApi): Promise<void> => {

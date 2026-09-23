@@ -3,11 +3,20 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { applyEdits, modify, parse, type ModificationOptions, type ParseError } from "jsonc-parser";
+import {
+  applyEdits,
+  findNodeAtLocation,
+  modify,
+  parse,
+  parseTree,
+  type ModificationOptions,
+  type ParseError,
+} from "jsonc-parser";
 import { z } from "zod";
 import { formatProbeOutput, probeQuota } from "./codex-usage-probe.js";
 import { statusState } from "./quota-format.js";
 import { resolveSignalPath } from "./codex-usage-signal.js";
+import { probeOpenCode2Quota } from "./opencode2-cli-probe.js";
 
 export type CliOptions = {
   help: boolean;
@@ -35,7 +44,7 @@ const helpText = () => {
     "  --install         Add plugin path to OpenCode config",
     "  --uninstall       Remove plugin path from OpenCode config",
     "  --config <path>   Config file path to use with --install/--uninstall",
-    "  --opencode <1|2>  OpenCode config version (default: 2)",
+    "  --opencode <1|2>  OpenCode version for setup and queries (default: 2)",
     "",
     "Examples:",
     "  opencode-codex-usage",
@@ -70,7 +79,9 @@ const parseConfig = (content: string, configPath: string): Record<string, unknow
 };
 
 const pluginEntryMatches = (entry: unknown, pluginPath: string): boolean => {
-  return entry === pluginPath || (Array.isArray(entry) && entry[0] === pluginPath);
+  if (entry === pluginPath || (Array.isArray(entry) && entry[0] === pluginPath)) return true;
+  const result = z.object({ package: z.string() }).safeParse(entry);
+  return result.success && result.data.package === pluginPath;
 };
 
 const pluginEntries = (
@@ -123,22 +134,38 @@ const removePluginEntries = (
     .filter((index) => index >= 0)
     .reverse();
 
-  return matchingIndexes.reduce(
-    (nextContent, index) =>
-      applyEdits(
-        nextContent,
-        modify(nextContent, [property, index], undefined, modificationOptions),
-      ),
-    content,
-  );
+  return matchingIndexes.reduce((nextContent, index) => {
+    const root = parseTree(nextContent);
+    if (!root) throw new Error(`could not parse ${configPath}`);
+    const array = findNodeAtLocation(root, [property]);
+    const node = array?.children?.[index];
+    const previous = array?.children?.[index - 1];
+    // jsonc-parser 3.3.1 leaves the last character of compact final items behind.
+    // Use AST bounds for that case, preserving the original closing bracket.
+    if (node && previous && index === (array?.children?.length ?? 0) - 1) {
+      const offset = previous.offset + previous.length;
+      return applyEdits(nextContent, [
+        { offset, length: node.offset + node.length - offset, content: "" },
+      ]);
+    }
+    return applyEdits(
+      nextContent,
+      modify(nextContent, [property, index], undefined, modificationOptions),
+    );
+  }, content);
 };
 
 export const resolvePluginInstallPath = (moduleDir: string): string => {
   return path.resolve(moduleDir, "..", "..");
 };
 
+const globalConfigDirectory = (): string =>
+  path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "opencode");
+
 export const resolveTuiConfigPath = (configPath: string, opencodeVersion: 1 | 2 = 1): string => {
-  return path.join(path.dirname(configPath), opencodeVersion === 2 ? "cli.json" : "tui.json");
+  return opencodeVersion === 2
+    ? path.join(globalConfigDirectory(), "cli.json")
+    : path.join(path.dirname(configPath), "tui.json");
 };
 
 const pluginPathFromModule = (): string => {
@@ -230,6 +257,7 @@ const runUninstall = async (
 
   const content = await readFile(configPath, "utf8");
   const nextContent = removePluginEntries(content, configPath, pluginPath, property);
+  parseConfig(nextContent, configPath);
 
   if (nextContent === content) {
     process.stdout.write(`No changes needed. Plugin path is not configured.\n`);
@@ -381,8 +409,7 @@ export const runCli = async (argv: string[] = process.argv.slice(2)): Promise<vo
   }
 
   if (options.install || options.uninstall) {
-    const configDirectory = options.opencodeVersion === 2 ? "opencode2" : "opencode";
-    const defaultConfigPath = path.join(os.homedir(), ".config", configDirectory, "opencode.jsonc");
+    const defaultConfigPath = path.join(globalConfigDirectory(), "opencode.jsonc");
     const configPath = options.configPath ? path.resolve(options.configPath) : defaultConfigPath;
     const tuiConfigPath = resolveTuiConfigPath(configPath, options.opencodeVersion);
     const isV2 = options.opencodeVersion === 2;
@@ -403,7 +430,10 @@ export const runCli = async (argv: string[] = process.argv.slice(2)): Promise<vo
     return;
   }
 
-  const snapshot = await probeQuota({ retryCount: options.retryCount });
+  const snapshot =
+    options.opencodeVersion === 2
+      ? await probeOpenCode2Quota(options.retryCount)
+      : await probeQuota({ retryCount: options.retryCount });
   const state = statusState(snapshot.status);
   const hasError = state === "error";
   const line = formatProbeOutput(snapshot, {

@@ -119,3 +119,51 @@ test("OpenCode 2 TUI probes through the connected server RPC", async () => {
   await assert.rejects(probe);
   await cleanup?.();
 });
+
+test("OpenCode 2 background probe failures are logged and manual failures show a toast", async (t) => {
+  const errors: string[] = [];
+  t.mock.method(console, "error", (message: string) => errors.push(message));
+  let claim: Parameters<Plugin.Context["ui"]["slot"]>[0] | undefined;
+  let layer: Parameters<Plugin.Context["keymap"]["layer"]>[0] | undefined;
+  const toasts: Array<{ message: string; variant?: string }> = [];
+  const plugin = createOpenCode2TuiPlugin(async () => ({
+    status: "error",
+    statusCode: 401,
+    error: "token expired",
+  }));
+  // SAFETY: setup only needs these UI APIs when a probe is supplied; the real monitor is exercised.
+  const context = {
+    ui: {
+      slot: (input: typeof claim) => {
+        claim = input;
+        return () => undefined;
+      },
+      toast: {
+        show: (toast: { message: string; variant?: string }) => {
+          toasts.push(toast);
+        },
+      },
+    },
+    keymap: {
+      layer: (input: typeof layer) => {
+        layer = input;
+      },
+    },
+  } as Plugin.Context;
+  const cleanup = await plugin.setup(context);
+  try {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.ok(errors.some((message) => message.includes("token expired")));
+    assert.equal(toasts.length, 0);
+    assert.equal(claim?.append, "app");
+    claim?.render({});
+    const command = layer?.().commands?.[0];
+    assert.ok(command);
+    await command.run();
+    assert.equal(toasts.length, 1);
+    assert.equal(toasts[0]?.variant, "error");
+    assert.match(toasts[0]?.message ?? "", /token expired/);
+  } finally {
+    await cleanup?.();
+  }
+});

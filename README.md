@@ -15,6 +15,9 @@ opencode-codex-usage --install
 
 Restart OpenCode. The installer configures both the server and TUI plugins for **OpenCode 2**.
 
+Global configuration lives in `$XDG_CONFIG_HOME/opencode`, or `~/.config/opencode` by default.
+Use `--config <path>` to select a server config; the V2 terminal plugin is always installed in the global `cli.json`.
+
 ## Check your usage
 
 **Ask the assistant:**
@@ -42,6 +45,8 @@ opencode-codex-usage --pretty  # Readable usage bars
 opencode-codex-usage --json    # JSON for scripts
 opencode-codex-usage --help    # All options
 ```
+
+OpenCode 2 terminal queries call the installed server plugin through `opencode api`, using OpenCode's service discovery and authentication. The `opencode` executable must be on `PATH`. Use `--retry 0`, `1`, or `2` to override retries for that query.
 
 ## Settings & troubleshooting
 
@@ -87,7 +92,9 @@ npm uninstall -g opencode-codex-usage
 
 Restart OpenCode after changing the installation.
 
-For legacy OpenCode 1, add `--opencode 1` to the install or uninstall command. The installer defaults to OpenCode 2 and leaves existing OpenCode 1 configuration alone.
+For legacy OpenCode 1, add `--opencode 1` to install, uninstall, or usage queries. V1 queries read `OPENCODE_AUTH_PATH` when set; on macOS and Linux they otherwise use `$XDG_DATA_HOME/opencode/auth.json`, falling back to `~/.local/share/opencode/auth.json`.
+
+If an earlier V2 installer wrote to `~/.config/opencode2`, move its plugin entries to your active global config before removing the old entries.
 
 </details>
 

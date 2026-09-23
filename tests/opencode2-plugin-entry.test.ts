@@ -8,15 +8,14 @@ type RegisteredTool = Parameters<ToolEditor["add"]>[0];
 
 const makeContext = (options?: {
   onTool?: (tool: RegisteredTool) => void;
-  onAbort?: () => void;
+  onSubscribe?: () => void;
   onToolDispose?: () => void;
   activeConnection?: () => Promise<unknown>;
   resolveConnection?: (connection: unknown) => Promise<unknown>;
-  onRpcHandler?: (handler: () => Promise<unknown>) => void;
+  onRpcHandler?: (handler: (input: { retryCount?: number }) => Promise<unknown>) => void;
   onRpcDispose?: () => void;
   toolTransformError?: Error;
 }) => {
-  let signal: AbortSignal | undefined;
   const context = {
     tool: {
       transform: async (transform: (editor: ToolEditor) => void) => {
@@ -28,20 +27,10 @@ const makeContext = (options?: {
       },
     },
     event: {
-      subscribe: (subscribeOptions?: { signal?: AbortSignal }) => {
-        signal = subscribeOptions?.signal;
+      subscribe: () => {
+        options?.onSubscribe?.();
         return {
           async *[Symbol.asyncIterator]() {
-            await new Promise<void>((resolve) => {
-              signal?.addEventListener(
-                "abort",
-                () => {
-                  options?.onAbort?.();
-                  resolve();
-                },
-                { once: true },
-              );
-            });
             yield* [];
           },
         };
@@ -54,7 +43,10 @@ const makeContext = (options?: {
       },
     },
     rpc: {
-      register: async (_definition: unknown, handlers: { usage: () => Promise<unknown> }) => {
+      register: async (
+        _definition: unknown,
+        handlers: { usage: (input: { retryCount?: number }) => Promise<unknown> },
+      ) => {
         options?.onRpcHandler?.(handlers.usage);
         return {
           dispose: async () => options?.onRpcDispose?.(),
@@ -64,7 +56,7 @@ const makeContext = (options?: {
     },
   } as unknown as Plugin.Context;
 
-  return { context, getSignal: () => signal };
+  return { context };
 };
 
 test("OpenCode 2 plugin registers the official codex_usage tool result", async () => {
@@ -104,22 +96,23 @@ test("OpenCode 2 plugin registers the official codex_usage tool result", async (
   assert.equal(toolDisposed, true);
 });
 
-test("OpenCode 2 cleanup aborts and awaits a blocked event subscription", async () => {
-  let aborted = false;
+test("OpenCode 2 releases registrations once without subscribing to unused events", async () => {
+  let subscriptions = 0;
+  let toolsDisposed = 0;
+  let rpcsDisposed = 0;
   const plugin = createOpenCode2Plugin(async () => ({ status: "ok" }));
-  const { context, getSignal } = makeContext({
-    onAbort: () => {
-      aborted = true;
-    },
+  const { context } = makeContext({
+    onSubscribe: () => subscriptions++,
+    onToolDispose: () => toolsDisposed++,
+    onRpcDispose: () => rpcsDisposed++,
   });
 
   const cleanup = await plugin.setup(context);
-  assert.equal(getSignal()?.aborted, false);
-
   await cleanup?.();
-
-  assert.equal(getSignal()?.aborted, true);
-  assert.equal(aborted, true);
+  await cleanup?.();
+  assert.equal(subscriptions, 0);
+  assert.equal(toolsDisposed, 1);
+  assert.equal(rpcsDisposed, 1);
 });
 
 test("OpenCode 2 tool follows the active OAuth credential on every call", async () => {
@@ -182,13 +175,9 @@ test("OpenCode 2 never falls back to legacy credentials without active OAuth", a
 });
 
 test("OpenCode 2 setup rolls back acquired resources when registration fails", async () => {
-  let aborted = false;
   let rpcDisposed = false;
   const plugin = createOpenCode2Plugin(async () => ({ status: "ok" }));
   const { context } = makeContext({
-    onAbort: () => {
-      aborted = true;
-    },
     onRpcDispose: () => {
       rpcDisposed = true;
     },
@@ -196,12 +185,11 @@ test("OpenCode 2 setup rolls back acquired resources when registration fails", a
   });
 
   await assert.rejects(async () => await plugin.setup(context), /tool registration failed/);
-  assert.equal(aborted, true);
   assert.equal(rpcDisposed, true);
 });
 
 test("OpenCode 2 RPC shares active-credential quota probing with the TUI", async () => {
-  let rpcHandler: (() => Promise<unknown>) | undefined;
+  let rpcHandler: ((input: { retryCount?: number }) => Promise<unknown>) | undefined;
   let rpcDisposed = false;
   const plugin = createOpenCode2Plugin(async (options) => ({
     status: options?.credentials?.accessToken ?? "missing",
@@ -225,7 +213,36 @@ test("OpenCode 2 RPC shares active-credential quota probing with the TUI", async
   });
 
   const cleanup = await plugin.setup(context);
-  assert.deepEqual(await rpcHandler?.(), { status: "active-token" });
+  assert.deepEqual(await rpcHandler?.({}), { status: "active-token" });
   await cleanup?.();
   assert.equal(rpcDisposed, true);
+});
+
+test("OpenCode 2 RPC forwards an explicit retry count to the quota probe", async () => {
+  let rpcHandler: ((input: { retryCount?: number }) => Promise<unknown>) | undefined;
+  const probes: unknown[] = [];
+  const plugin = createOpenCode2Plugin(async (options) => {
+    probes.push(options);
+    return { status: "ok" };
+  });
+  const { context } = makeContext({
+    activeConnection: async () => ({ id: "active" }),
+    resolveConnection: async () => ({
+      type: "oauth",
+      access: "active-token",
+      metadata: { accountID: "active-account" },
+    }),
+    onRpcHandler: (handler) => {
+      rpcHandler = handler;
+    },
+  });
+  const cleanup = await plugin.setup(context);
+  try {
+    await rpcHandler?.({ retryCount: 2 });
+    assert.deepEqual(probes, [
+      { retryCount: 2, credentials: { accessToken: "active-token", accountId: "active-account" } },
+    ]);
+  } finally {
+    await cleanup?.();
+  }
 });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync as execFile, type ExecFileSyncOptions } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +19,23 @@ const nestedPluginConfigSchema = z.object({
   plugins: z.array(z.string()),
   nested: z.object({ plugins: z.array(z.string()) }),
 });
+
+// Every subprocess gets a private global config directory beside its fixture.
+const execFileSync = (file: string, args: string[], options: ExecFileSyncOptions = {}) => {
+  const configIndex = args.indexOf("--config");
+  const configPath = args[configIndex + 1];
+  assert.ok(configIndex >= 0 && configPath);
+  return execFile(file, args, {
+    ...options,
+    env: { ...process.env, XDG_CONFIG_HOME: path.join(path.dirname(configPath), ".config") },
+  });
+};
+
+const prepareCliConfig = async (directory: string): Promise<string> => {
+  const config = path.join(directory, ".config", "opencode", "cli.json");
+  await mkdir(path.dirname(config), { recursive: true });
+  return config;
+};
 
 test("parseCliOptions defaults to OpenCode 2", () => {
   assert.equal(parseCliOptions([]).opencodeVersion, 2);
@@ -164,14 +181,10 @@ test("resolvePluginInstallPath targets package root for server and tui entrypoin
   assert.equal(resolvePluginInstallPath(distLibPath), path.resolve(distLibPath, "..", ".."));
 });
 
-test("resolveTuiConfigPath targets tui config beside opencode config", () => {
+test("resolveTuiConfigPath targets legacy tui config beside opencode config", () => {
   assert.equal(
     resolveTuiConfigPath("/home/alice/.config/opencode/opencode.jsonc"),
     "/home/alice/.config/opencode/tui.json",
-  );
-  assert.equal(
-    resolveTuiConfigPath("/home/alice/.config/opencode2/opencode.jsonc", 2),
-    "/home/alice/.config/opencode2/cli.json",
   );
 });
 
@@ -260,7 +273,7 @@ test("default OpenCode 2 install and uninstall use official package entrypoints"
   const cliPath = path.join(projectRoot, "dist", "bin", "opencode-codex-usage.js");
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "opencode-codex-usage-v2-"));
   const configPath = path.join(tempDir, "opencode.jsonc");
-  const cliConfigPath = resolveTuiConfigPath(configPath, 2);
+  const cliConfigPath = await prepareCliConfig(tempDir);
   const pluginPath = resolvePluginInstallPath(path.join(projectRoot, "dist", "lib"));
   const serverPlugin = path.join(pluginPath, "opencode2-plugin");
   const tuiPlugin = path.join(pluginPath, "opencode2-tui-plugin");
@@ -303,7 +316,7 @@ test("OpenCode 2 installer ignores commented plugin examples", async () => {
   const cliPath = path.join(projectRoot, "dist", "bin", "opencode-codex-usage.js");
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "opencode-codex-usage-jsonc-"));
   const configPath = path.join(tempDir, "opencode.jsonc");
-  const cliConfigPath = resolveTuiConfigPath(configPath, 2);
+  const cliConfigPath = await prepareCliConfig(tempDir);
   const pluginPath = resolvePluginInstallPath(path.join(projectRoot, "dist", "lib"));
   const serverPlugin = path.join(pluginPath, "opencode2-plugin");
   const commented = `{
@@ -341,7 +354,7 @@ test("OpenCode 2 installer ignores commented plugin examples", async () => {
       configPath,
     ]);
     const uninstalled = await readFile(configPath, "utf8");
-    assert.ok(!uninstalled.includes(`// ${JSON.stringify(serverPlugin)}`));
+    assert.ok(uninstalled.includes(`// ${JSON.stringify(serverPlugin)}`));
     assert.deepEqual(
       pluralPluginConfigSchema.parse(parse(uninstalled, undefined, { allowTrailingComma: true }))
         .plugins,
@@ -357,7 +370,7 @@ test("OpenCode 2 installer adds only a root plugins property", async () => {
   const cliPath = path.join(projectRoot, "dist", "bin", "opencode-codex-usage.js");
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "opencode-codex-usage-root-"));
   const configPath = path.join(tempDir, "opencode.jsonc");
-  const cliConfigPath = resolveTuiConfigPath(configPath, 2);
+  const cliConfigPath = await prepareCliConfig(tempDir);
   const pluginPath = resolvePluginInstallPath(path.join(projectRoot, "dist", "lib"));
   const serverPlugin = path.join(pluginPath, "opencode2-plugin");
   const config = `// leading 😀 example { "plugins": [] }
@@ -392,7 +405,7 @@ test("OpenCode 2 installer rejects a non-array root plugins property", async () 
   const cliPath = path.join(projectRoot, "dist", "bin", "opencode-codex-usage.js");
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "opencode-codex-usage-invalid-root-"));
   const configPath = path.join(tempDir, "opencode.jsonc");
-  const cliConfigPath = resolveTuiConfigPath(configPath, 2);
+  const cliConfigPath = await prepareCliConfig(tempDir);
   const original = '{\n  "plugins": { "not": "an array" }\n}\n';
 
   try {
@@ -418,7 +431,7 @@ test("OpenCode 2 installer rejects malformed JSONC without modifying it", async 
   const cliPath = path.join(projectRoot, "dist", "bin", "opencode-codex-usage.js");
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "opencode-codex-usage-malformed-"));
   const configPath = path.join(tempDir, "opencode.jsonc");
-  const cliConfigPath = resolveTuiConfigPath(configPath, 2);
+  const cliConfigPath = await prepareCliConfig(tempDir);
   const malformed = '{\n  "plugins": [],\n  "broken":\n}\n';
 
   try {

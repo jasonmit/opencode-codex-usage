@@ -32,7 +32,9 @@ export const createOpenCode2TuiPlugin = (
       const monitor = createMonitor({
         probe: quotaProbe,
         notify: (toast) => ctx.ui.toast.show(toast),
-        logError: () => undefined,
+        logError: (message, detail) => {
+          console.error(`[opencode-codex-usage] ${message}${detail ? `: ${detail}` : ""}`);
+        },
         pollMs: resolvePollMs(),
         threshold: resolveToastThreshold(),
         durationMs: resolveToastDurationMs(),
