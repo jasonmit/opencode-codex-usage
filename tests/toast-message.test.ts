@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import { messageFromParsed, toastBodyFromParsed } from "#lib/codex-usage-toast-plugin.js";
 import { test } from "./test.ts";
 
-test("renders each quota as a compact line with a usage bar", () => {
+test("renders remaining quota in compact labeled rows", () => {
   const message = messageFromParsed({
     status: "warn",
-    used: { primary: 81, secondary: 9 },
-    reset: { primary: "1h0m", secondary: "7d0h" },
+    used: { primary: 22, secondary: 75 },
+    reset: { primary: "2h31m", secondary: "3d15h" },
     windowMinutes: { primary: 300, secondary: 10080 },
   });
 
   assert.equal(
     message,
-    "5h  ████████░░  81% used · resets 1h0m\n7d  █░░░░░░░░░   9% used · resets 7d0h",
+    "5h limit      ██████░░ 78% left · resets 2h31m\nWeekly limit  ██░░░░░░ 25% left · resets 3d15h",
   );
 });
 
@@ -24,7 +24,7 @@ test("omits an empty secondary lane without a window duration", () => {
     windowMinutes: { primary: 10080, secondary: null },
   });
 
-  assert.equal(message, "7d  ░░░░░░░░░░   3% used · resets 6d23h");
+  assert.equal(message, "Weekly limit  ████████ 97% left · resets 6d23h");
 });
 
 test("falls back to compact placeholders for missing metric values", () => {
@@ -34,7 +34,10 @@ test("falls back to compact placeholders for missing metric values", () => {
     reset: { primary: null, secondary: null },
   });
 
-  assert.equal(message, "A  ··········    - used · resets -\nB  ··········    - used · resets -");
+  assert.equal(
+    message,
+    "A limit  ········   - left · resets -\nB limit  ········   - left · resets -",
+  );
 });
 
 test("falls back to placeholders for non-scalar metric values", () => {
@@ -48,7 +51,7 @@ test("falls back to placeholders for non-scalar metric values", () => {
 
   assert.equal(
     message,
-    "A  ··········    - used · resets 1h0m\nB  ··········    - used · resets 2h0m",
+    "A limit  ········   - left · resets 1h0m\nB limit  ········   - left · resets 2h0m",
   );
 });
 
@@ -61,7 +64,7 @@ test("falls back to placeholders for malformed percentage strings", () => {
 
   assert.equal(
     message,
-    "A  ··········    - used · resets 1h0m\nB  ··········    - used · resets 2h0m",
+    "A limit  ········   - left · resets 1h0m\nB limit  ········   - left · resets 2h0m",
   );
 });
 
@@ -74,7 +77,7 @@ test("falls back to neutral labels when window minutes are missing", () => {
 
   assert.equal(
     message,
-    "A  ████████░░  81% used · resets 1h0m\nB  █░░░░░░░░░   9% used · resets 7d0h",
+    "A limit  ██░░░░░░ 19% left · resets 1h0m\nB limit  ███████░ 91% left · resets 7d0h",
   );
 });
 
@@ -87,7 +90,7 @@ test("keeps backward compatibility with legacy pair strings", () => {
 
   assert.equal(
     message,
-    "A  ████████░░  81% used · resets 1h0m\nB  █░░░░░░░░░   9% used · resets 7d0h",
+    "A limit  ██░░░░░░ 19% left · resets 1h0m\nB limit  ███████░ 91% left · resets 7d0h",
   );
 });
 
@@ -114,7 +117,7 @@ test("puts normal quota details in the toast message for a two-line toast", () =
   assert.equal(body.title, "Codex quota ⚠️");
   assert.equal(
     body.message,
-    "5h  ████████░░  81% used · resets 1h0m\n7d  █░░░░░░░░░   9% used · resets 7d0h",
+    "5h limit      ██░░░░░░ 19% left · resets 1h0m\nWeekly limit  ███████░ 91% left · resets 7d0h",
   );
   assert.equal(body.variant, "warning");
   assert.equal(body.duration, 5000);

@@ -331,21 +331,21 @@ const percentageFromText = (value: string): number | undefined => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
-const usageText = (value: string): string => {
-  const normalized = value.trim();
-  if (percentageFromText(normalized) === undefined) return "-";
-  if (normalized.endsWith("%")) return normalized;
-
-  return `${normalized}%`;
+const remainingPercentage = (value: string): number | undefined => {
+  const used = percentageFromText(value);
+  return used === undefined ? undefined : Math.max(0, Math.min(100, 100 - used));
 };
 
-const usageBar = (value: string, width = 10): string => {
-  const used = percentageFromText(value);
-  if (used === undefined) return "·".repeat(width);
+const quotaBar = (remaining: number | undefined, width = 8): string => {
+  if (remaining === undefined) return "·".repeat(width);
 
-  const bounded = Math.max(0, Math.min(100, used));
-  const filled = Math.round((bounded / 100) * width);
+  const filled = Math.round((remaining / 100) * width);
   return `${"█".repeat(filled)}${"░".repeat(width - filled)}`;
+};
+
+const quotaWindowLabel = (minutes: number | undefined, fallback: string): string => {
+  if (minutes === 7 * 24 * 60) return "Weekly limit";
+  return `${windowLabelFromMinutes(minutes, fallback).replace(/\s+window$/, "")} limit`;
 };
 
 type ProbeDisplaySnapshot = Omit<ProbeSnapshot, "used" | "reset" | "windowMinutes"> & {
@@ -361,8 +361,8 @@ export const messageFromParsed = (parsed: ProbeDisplaySnapshot): string => {
   }
 
   const [windowA, windowB] = windowMinutesPairFromUnknown(parsed.windowMinutes);
-  const firstWindowLabel = windowLabelFromMinutes(windowA, "A").replace(/\s+window$/, "");
-  const secondWindowLabel = windowLabelFromMinutes(windowB, "B").replace(/\s+window$/, "");
+  const firstWindowLabel = quotaWindowLabel(windowA, "A");
+  const secondWindowLabel = quotaWindowLabel(windowB, "B");
   const [usedWindowA, usedWindowB] = pairFromUnknown(parsed.used);
   const [resetWindowA, resetWindowB] = pairFromUnknown(parsed.reset);
   const windows = [
@@ -387,8 +387,9 @@ export const messageFromParsed = (parsed: ProbeDisplaySnapshot): string => {
 
   return visibleWindows
     .map(({ label, used, reset }) => {
-      const usage = usageText(used);
-      return `${label.padEnd(labelWidth)}  ${usageBar(used)} ${usage.padStart(4)} used · resets ${reset}`;
+      const remaining = remainingPercentage(used);
+      const usage = remaining === undefined ? "- left" : `${Math.round(remaining)}% left`;
+      return `${label.padEnd(labelWidth)}  ${quotaBar(remaining)} ${usage.padStart(8)} · resets ${reset}`;
     })
     .join("\n");
 };
