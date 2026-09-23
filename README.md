@@ -108,3 +108,14 @@ npm run lint
 npm run build
 npm run format:check
 ```
+
+CLI code is split between `lib/cli-options.ts`, `lib/plugin-install.ts`, and
+`lib/config-edit.ts`, with `lib/codex-usage-cli.ts` coordinating commands.
+Tests cover options and JSONC edits directly; `*-integration.test.ts` files run
+the CLI in isolated environments using `tests/helpers/cli.ts`.
+
+`npm test` compiles into `.test-dist/`; `npm run build` writes production files
+to `dist/`. Neither command clears the other's output.
+The `#lib/*` and `#root/*` aliases resolve to `dist/` by default; the test runner
+and its CLI subprocesses use `--conditions=opencode-codex-usage-test` to resolve
+them to `.test-dist/` instead.

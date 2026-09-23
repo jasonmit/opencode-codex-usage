@@ -1,6 +1,7 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
+    "outDir": "../.test-dist",
     "rewriteRelativeImportExtensions": true
   },
   "include": ["../*.ts", "../bin/**/*.ts", "../lib/**/*.ts", "**/*.ts"]

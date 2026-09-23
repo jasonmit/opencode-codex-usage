@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { z } from "zod";
 import {
   CodexQuotaToastPlugin,
-  isCommandExecutedEvent,
-  isCodexUsageCommand,
   isFileWatcherEvent,
   isSessionDeletedEvent,
   isSessionActivityEvent,
@@ -37,28 +35,6 @@ test("matches observed session lifecycle event types", () => {
 test("matches documented session deletion event type", () => {
   assert.equal(isSessionDeletedEvent("session.deleted"), true);
   assert.equal(isSessionDeletedEvent("server.instance.disposed"), false);
-});
-
-test("matches command executed event type", () => {
-  assert.equal(isCommandExecutedEvent("command.executed"), true);
-  assert.equal(isCommandExecutedEvent("message.updated"), false);
-});
-
-test("matches codex usage command names", () => {
-  assert.equal(isCodexUsageCommand("/codex-usage"), true);
-  assert.equal(isCodexUsageCommand("codex-usage"), true);
-  assert.equal(isCodexUsageCommand("/other"), false);
-  assert.equal(isCodexUsageCommand(undefined), false);
-});
-
-test("server plugin does not register codex usage as a session command", async () => {
-  const plugin = CodexQuotaToastPlugin(pluginContext());
-  const config: { command?: Record<string, { description: string; template: string }> } = {};
-
-  await plugin.config?.(config);
-  plugin.dispose?.();
-
-  assert.equal(config.command?.["codex-usage"], undefined);
 });
 
 test("server plugin does not intercept codex usage session command", async () => {

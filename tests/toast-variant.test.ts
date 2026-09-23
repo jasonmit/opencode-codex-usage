@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { toastVariantForStatus } from "#lib/codex-usage-toast-plugin.js";
+import { toastVariantForStatus } from "#lib/quota-toast.js";
 import { test } from "./test.ts";
 
 test("maps status values to toast variants", () => {

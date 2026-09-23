@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import {
-  resolveToastThreshold,
   shouldToastForBackground,
   shouldToastForBackgroundTransition,
   type ToastThreshold,
-} from "#lib/codex-usage-toast-plugin.js";
+} from "#lib/quota-policy.js";
+import { resolveToastThreshold } from "#lib/quota-settings.js";
 import { test } from "./test.ts";
 
 test("uses default threshold when env var is not set", () => {

@@ -4,6 +4,7 @@ export function test(name: string, fn: TestFn): void {
   void nodeTest(name, fn);
 }
 
+// Development helpers for temporarily skipping or focusing tests; unused exports are intentional.
 export function skip(name: string, fn: TestFn): void {
   void nodeTest.skip(name, fn);
 }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { resolvePollMs } from "#lib/codex-usage-toast-plugin.js";
+import { resolvePollMs } from "#lib/quota-settings.js";
 import { test } from "./test.ts";
 
 test("uses default interval when env var is not set", () => {
@@ -14,4 +14,15 @@ test("falls back to default interval for invalid values", () => {
   assert.equal(resolvePollMs({ OPENCODE_CODEX_QUOTA_POLL_MS: "abc" }, 600_000), 600_000);
   assert.equal(resolvePollMs({ OPENCODE_CODEX_QUOTA_POLL_MS: "0" }, 600_000), 600_000);
   assert.equal(resolvePollMs({ OPENCODE_CODEX_QUOTA_POLL_MS: "-1" }, 600_000), 600_000);
+});
+
+test("accepts the maximum Node timer delay", () => {
+  assert.equal(resolvePollMs({ OPENCODE_CODEX_QUOTA_POLL_MS: "2147483647" }), 2_147_483_647);
+});
+
+test("falls back instead of overflowing Node timers to a 1ms interval", () => {
+  for (const value of ["2147483648", "2592000000", "9007199254740991"]) {
+    assert.equal(resolvePollMs({ OPENCODE_CODEX_QUOTA_POLL_MS: value }), 600_000);
+    assert.equal(resolvePollMs({ OPENCODE_CODEX_QUOTA_POLL_MS: value }, 120_000), 120_000);
+  }
 });

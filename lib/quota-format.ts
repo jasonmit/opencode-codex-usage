@@ -4,15 +4,6 @@ export type ProbeUsage = {
   total_tokens?: number;
 };
 
-export type ProbeResult = {
-  status?: string;
-  statusCode?: string;
-  used?: string;
-  reset?: string;
-};
-
-const ProbeResultKeySchema = z.enum(["status", "statusCode", "used", "reset"]);
-
 const ResponseCompletedSchema = z.object({
   type: z.literal("response.completed"),
   response: z
@@ -80,24 +71,6 @@ export const extractCompletedUsageFromSse = (text: string): ProbeUsage | null =>
   }
 
   return null;
-};
-
-export const parseProbeLine = (line: string): ProbeResult => {
-  const result: ProbeResult = {};
-  const normalizedLine = line.trim();
-  if (normalizedLine === "") return result;
-
-  const tokens = normalizedLine.split(/\s+/);
-  for (const token of tokens) {
-    const idx = token.indexOf("=");
-    if (idx <= 0) continue;
-    const key = token.slice(0, idx);
-    const value = token.slice(idx + 1);
-    const parsedKey = ProbeResultKeySchema.safeParse(key);
-    if (!parsedKey.success) continue;
-    result[parsedKey.data] = value;
-  }
-  return result;
 };
 
 export const statusState = (raw: string | undefined): string => {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { messageFromParsed, toastBodyFromParsed } from "#lib/codex-usage-toast-plugin.js";
+import { messageFromParsed, toastBodyFromParsed } from "#lib/quota-toast.js";
 import { test } from "./test.ts";
 
 test("renders remaining quota in compact labeled rows", () => {

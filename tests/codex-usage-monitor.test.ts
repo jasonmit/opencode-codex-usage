@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { createQuotaMonitor, type ToastBody } from "#lib/codex-usage-monitor.js";
+import { createQuotaMonitor } from "#lib/codex-usage-monitor.js";
+import type { ToastBody } from "#lib/quota-toast.js";
 import { type ProbeSnapshot } from "#lib/codex-usage-probe.js";
 import { test } from "./test.ts";
 

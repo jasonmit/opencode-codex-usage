@@ -4,7 +4,7 @@ import path from "node:path";
 import { createQuotaMonitor } from "./lib/codex-usage-monitor.js";
 import { probeQuota } from "./lib/codex-usage-probe.js";
 import { resolveSignalPath } from "./lib/codex-usage-signal.js";
-import { resolveToastDurationMs } from "./lib/codex-usage-toast-plugin.js";
+import { resolveToastDurationMs } from "./lib/quota-settings.js";
 
 type TuiToast = {
   title?: string;

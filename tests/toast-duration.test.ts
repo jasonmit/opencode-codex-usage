@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { resolveToastDurationMs } from "#lib/codex-usage-toast-plugin.js";
+import { resolveToastDurationMs } from "#lib/quota-settings.js";
 import { test } from "./test.ts";
 
 test("uses default toast duration when env var is not set", () => {

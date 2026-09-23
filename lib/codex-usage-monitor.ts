@@ -3,11 +3,9 @@ import { type ProbeSnapshot } from "./codex-usage-probe.js";
 import {
   shouldToastForBackground,
   shouldToastForBackgroundTransition,
-  toastBodyFromParsed,
   type ToastThreshold,
-} from "./codex-usage-toast-plugin.js";
-
-export type ToastBody = ReturnType<typeof toastBodyFromParsed>;
+} from "./quota-policy.js";
+import { toastBodyFromParsed, type ToastBody } from "./quota-toast.js";
 
 type RefreshOptions = {
   force?: boolean;

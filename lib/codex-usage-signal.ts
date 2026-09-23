@@ -1,5 +1,7 @@
+import { rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { lstatIfExists } from "./file-status.js";
 
 export const SIGNAL_FILENAME = ".opencode-codex-usage-trigger";
 const SIGNAL_PATH_ENV = "OPENCODE_CODEX_USAGE_SIGNAL_PATH";
@@ -20,4 +22,20 @@ export const resolveSignalPath = (env: NodeJS.ProcessEnv = process.env): string 
 
   const filename = `${SIGNAL_FILENAME}-${signalOwnerTag(env)}`;
   return path.join(os.tmpdir(), filename);
+};
+
+export const writeSignalFileSafely = async (signalPath: string, stamp: string): Promise<void> => {
+  const signalStat = await lstatIfExists(signalPath);
+
+  if (signalStat?.isSymbolicLink()) {
+    throw new Error(`refusing to write trigger file through symlink: ${signalPath}`);
+  }
+
+  const tempPath = `${signalPath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await writeFile(tempPath, stamp, { encoding: "utf8", mode: 0o600 });
+    await rename(tempPath, signalPath);
+  } finally {
+    await rm(tempPath, { force: true });
+  }
 };

@@ -594,8 +594,3 @@ export const probeQuota = async (options: ProbeQuotaOptions = {}): Promise<Probe
 
   return snapshot;
 };
-
-export const probeQuotaLine = async (): Promise<string> => {
-  const snapshot = await probeQuota();
-  return formatProbeOutput(snapshot);
-};

@@ -11,7 +11,7 @@ import {
   resolvePollMs,
   resolveToastDurationMs,
   resolveToastThreshold,
-} from "./lib/codex-usage-toast-plugin.js";
+} from "./lib/quota-settings.js";
 
 type QuotaProbe = () => Promise<ProbeSnapshot>;
 type MonitorFactory = (options: QuotaMonitorOptions) => QuotaMonitor;
