@@ -16,6 +16,34 @@ test("renders remaining quota in compact labeled rows", () => {
   );
 });
 
+test("renders exhausted quota as an empty bar with 0% left", () => {
+  const message = messageFromParsed({
+    status: "critical",
+    used: { primary: 100, secondary: 100 },
+    reset: { primary: "2h31m", secondary: "3d15h" },
+    windowMinutes: { primary: 300, secondary: 10080 },
+  });
+
+  assert.equal(
+    message,
+    "5h limit      ░░░░░░░░  0% left · resets 2h31m\nWeekly limit  ░░░░░░░░  0% left · resets 3d15h",
+  );
+});
+
+test("renders unused quota as a full bar with 100% left", () => {
+  const message = messageFromParsed({
+    status: "ok",
+    used: { primary: 0, secondary: 0 },
+    reset: { primary: "0m", secondary: "0m" },
+    windowMinutes: { primary: 300, secondary: 10080 },
+  });
+
+  assert.equal(
+    message,
+    "5h limit      ████████ 100% left · resets 0m\nWeekly limit  ████████ 100% left · resets 0m",
+  );
+});
+
 test("omits an empty secondary lane without a window duration", () => {
   const message = messageFromParsed({
     status: "ok",
