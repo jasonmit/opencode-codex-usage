@@ -1,3 +1,4 @@
 node_modules
 dist
 .test-dist
+tools/oxlint/readable-spacing

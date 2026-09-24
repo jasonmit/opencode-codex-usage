@@ -4,6 +4,7 @@ import path from "node:path";
 import { lstatIfExists } from "./file-status.js";
 
 export const SIGNAL_FILENAME = ".opencode-codex-usage-trigger";
+
 const SIGNAL_PATH_ENV = "OPENCODE_CODEX_USAGE_SIGNAL_PATH";
 
 const signalOwnerTag = (env: NodeJS.ProcessEnv = process.env): string => {
@@ -13,14 +14,17 @@ const signalOwnerTag = (env: NodeJS.ProcessEnv = process.env): string => {
 
   const rawUser = env.USER ?? env.USERNAME ?? "unknown";
   const safeUser = rawUser.replace(/[^a-zA-Z0-9_-]/g, "_");
+
   return `user-${safeUser}`;
 };
 
 export const resolveSignalPath = (env: NodeJS.ProcessEnv = process.env): string => {
   const configured = env[SIGNAL_PATH_ENV]?.trim();
+
   if (configured) return path.resolve(configured);
 
   const filename = `${SIGNAL_FILENAME}-${signalOwnerTag(env)}`;
+
   return path.join(os.tmpdir(), filename);
 };
 
@@ -32,6 +36,7 @@ export const writeSignalFileSafely = async (signalPath: string, stamp: string): 
   }
 
   const tempPath = `${signalPath}.${process.pid}.${Date.now()}.tmp`;
+
   try {
     await writeFile(tempPath, stamp, { encoding: "utf8", mode: 0o600 });
     await rename(tempPath, signalPath);

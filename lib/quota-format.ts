@@ -22,11 +22,13 @@ const ResponseCompletedSchema = z.object({
 
 export const val = (headers: Headers, key: string, fallback = "-"): string => {
   const value = headers.get(key) ?? "";
+
   return value !== "" ? value : fallback;
 };
 
 export const durationText = (secondsRaw: string): string => {
   const totalParsed = Number.parseInt(secondsRaw, 10);
+
   if (!Number.isFinite(totalParsed)) return "-";
 
   const total = Math.max(totalParsed, 0);
@@ -37,7 +39,9 @@ export const durationText = (secondsRaw: string): string => {
   const minutes = Math.floor(remAfterHours / 60);
 
   if (days > 0) return `${days}d${hours}h`;
+
   if (hours > 0) return `${hours}h${minutes}m`;
+
   return `${minutes}m`;
 };
 
@@ -48,8 +52,11 @@ export const healthLabel = (primaryRaw: string, secondaryRaw: string): string =>
   if (!Number.isFinite(primary) || !Number.isFinite(secondary)) return "unknown";
 
   const peak = Math.max(primary, secondary);
+
   if (peak >= 90) return "critical";
+
   if (peak >= 75) return "warn";
+
   return "ok";
 };
 
@@ -59,11 +66,14 @@ export const extractCompletedUsageFromSse = (text: string): ProbeUsage | null =>
   for (const line of lines) {
     if (!line.startsWith("data: ")) continue;
     const payload = line.slice(6);
+
     if (!payload || payload === "[DONE]") continue;
 
     try {
       const completed = ResponseCompletedSchema.safeParse(JSON.parse(payload));
+
       if (!completed.success) continue;
+
       return completed.data.response?.usage ?? null;
     } catch {
       continue;
@@ -76,5 +86,6 @@ export const extractCompletedUsageFromSse = (text: string): ProbeUsage | null =>
 export const statusState = (raw: string | undefined): string => {
   const value = raw ?? "";
   const match = value.match(/^([A-Za-z]+)/);
+
   return match ? match[1].toLowerCase() : "unknown";
 };

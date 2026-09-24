@@ -35,10 +35,12 @@ type TuiApi = {
 };
 
 const TUI_DEBUG_ENV = "OPENCODE_CODEX_USAGE_TUI_DEBUG";
+
 const debugLogPath = path.join(os.tmpdir(), "opencode-codex-usage-tui-debug.log");
 
 const debugEnabled = (): boolean => {
   const value = process.env[TUI_DEBUG_ENV]?.trim().toLowerCase();
+
   return value === "1" || value === "true" || value === "yes";
 };
 
@@ -97,13 +99,16 @@ export const CodexQuotaTuiPlugin = async (api: TuiApi): Promise<void> => {
           void monitor.refresh({ force: true, showFailure: true });
         },
       };
+
       debugLog("register callback returned command", {
         value: command.value,
         slashName: command.slash.name,
       });
+
       return [command];
     })(),
   ]);
+
   debugLog("command registered");
 
   api.lifecycle.onDispose(() => {

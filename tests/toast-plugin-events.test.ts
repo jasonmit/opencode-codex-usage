@@ -56,12 +56,15 @@ test("server plugin exposes current Codex quota to the agent", async (testContex
     windowMinutes: { primary: 300, secondary: 10080 },
     probeTokens: 10,
   };
+
   const context = {
     ...pluginContext(),
     probeQuota: async () => snapshot,
   };
+
   const plugin = CodexQuotaToastPlugin(context);
   testContext.after(() => plugin.dispose?.());
+
   const AgentToolPluginSchema = z.object({
     tool: z.object({
       codex_usage: z.object({

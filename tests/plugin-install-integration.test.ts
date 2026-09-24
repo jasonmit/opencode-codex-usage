@@ -9,9 +9,11 @@ test("default V2 installation uses XDG_CONFIG_HOME for both plugins", async (t) 
   t.after(state.cleanup);
   const result = state.run(["--install"]);
   assert.equal(result.status, 0, result.stderr);
+
   const server = JSON.parse(
     await readFile(path.join(state.configHome, "opencode/opencode.jsonc"), "utf8"),
   );
+
   const tui = JSON.parse(await readFile(path.join(state.configHome, "opencode/cli.json"), "utf8"));
   assert.deepEqual(server, { plugins: [serverPlugin] });
   assert.deepEqual(tui, { plugins: [tuiPlugin] });
@@ -22,9 +24,11 @@ test("default V2 installation falls back to ~/.config/opencode", async (t) => {
   t.after(state.cleanup);
   const result = state.run(["--install"], { ...state.env, XDG_CONFIG_HOME: "" });
   assert.equal(result.status, 0, result.stderr);
+
   const server = JSON.parse(
     await readFile(path.join(state.directory, ".config/opencode/opencode.jsonc"), "utf8"),
   );
+
   assert.deepEqual(server, { plugins: [serverPlugin] });
 });
 
@@ -103,6 +107,7 @@ test("installer rejects invalid configuration without modifying it", async (t) =
   const state = await fixture();
   t.after(state.cleanup);
   const config = path.join(state.directory, "opencode.jsonc");
+
   for (const original of ['{"plugins": {"not": "an array"}}', '{"plugins": [], "broken":}']) {
     await writeFile(config, original);
     const result = state.run(["--install", "--config", config]);
@@ -131,10 +136,12 @@ for (const version of [1, 2] as const) {
     const state = await fixture();
     t.after(state.cleanup);
     const config = path.join(state.directory, "project/opencode.jsonc");
+
     const tuiConfig =
       version === 1
         ? path.join(state.directory, "project/tui.json")
         : path.join(state.configHome, "opencode/cli.json");
+
     const property = version === 1 ? "plugin" : "plugins";
     await mkdir(path.dirname(tuiConfig), { recursive: true });
     const args = ["--install", "--opencode", String(version), "--config", config];
@@ -162,10 +169,12 @@ for (const version of [1, 2] as const) {
     const state = await fixture();
     t.after(state.cleanup);
     const config = path.join(state.directory, "opencode.jsonc");
+
     const tuiConfig =
       version === 1
         ? path.join(state.directory, "tui.json")
         : path.join(state.configHome, "opencode/cli.json");
+
     const property = version === 1 ? "plugin" : "plugins";
     const original = JSON.stringify({ [property]: ["other", version === 1 ? root : serverPlugin] });
     await writeFile(config, original);

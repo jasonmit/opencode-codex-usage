@@ -21,20 +21,25 @@ const unitFormatter = {
 } as const;
 
 const PropertyRecordSchema = z.record(z.string(), z.unknown());
+
 const TextValueSchema = z.union([z.string(), z.number(), z.boolean()]);
 
 const pairFromText = (raw: string): [string, string] => {
   const normalized = raw.trim();
+
   if (normalized === "") return ["-", "-"];
   const [left, right] = normalized.split("/", 2);
+
   return [left?.trim() || "-", right?.trim() || "-"];
 };
 
 const textFromUnknown = (value: unknown): string => {
   if (value === null || value === undefined) return "-";
   const parsed = TextValueSchema.safeParse(value);
+
   if (!parsed.success) return "-";
   const normalized = String(parsed.data).trim();
+
   return normalized === "" ? "-" : normalized;
 };
 
@@ -42,6 +47,7 @@ const pairFromUnknown = (value: unknown): [string, string] => {
   if (typeof value === "string") return pairFromText(value);
 
   const record = PropertyRecordSchema.safeParse(value);
+
   if (record.success) {
     return [
       textFromUnknown(record.data.primary ?? record.data.windowA),
@@ -59,8 +65,10 @@ const positiveIntFromUnknown = (value: unknown): number | undefined => {
 
   if (typeof value === "string") {
     const normalized = value.trim();
+
     if (!/^\d+$/.test(normalized)) return undefined;
     const parsed = Number(normalized);
+
     return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
   }
 
@@ -70,10 +78,12 @@ const positiveIntFromUnknown = (value: unknown): number | undefined => {
 const windowMinutesPairFromUnknown = (value: unknown): [number | undefined, number | undefined] => {
   if (typeof value === "string") {
     const [left, right] = value.trim() === "" ? ["", ""] : value.split("/", 2);
+
     return [positiveIntFromUnknown(left ?? ""), positiveIntFromUnknown(right ?? "")];
   }
 
   const record = PropertyRecordSchema.safeParse(value);
+
   if (record.success) {
     return [
       positiveIntFromUnknown(record.data.primary ?? record.data.windowA),
@@ -103,19 +113,25 @@ const TOAST_VARIANT_BY_STATUS = {
 
 export const toastVariantForStatus = (rawStatus: string | undefined): ToastVariant => {
   const state = statusStateNormalized(rawStatus);
+
   return TOAST_VARIANT_BY_STATUS[state];
 };
 
 const emojiForStatus = (rawStatus: string | undefined): string => {
   const state = statusStateNormalized(rawStatus);
+
   if (state === "ok") return "✅";
+
   if (state === "warn") return "⚠️";
+
   if (state === "unknown") return "❓";
+
   return "🚨";
 };
 
 const toastTitleForStatus = (rawStatus: string | undefined): string => {
   const emoji = emojiForStatus(rawStatus);
+
   return emoji ? `Codex quota ${emoji}` : "Codex quota";
 };
 
@@ -123,13 +139,16 @@ const windowLabelFromMinutes = (minutes: number | undefined, fallback: string): 
   if (!minutes || !Number.isFinite(minutes) || minutes <= 0) return fallback;
 
   const dayMinutes = 24 * 60;
+
   if (minutes % dayMinutes === 0) {
     const days = minutes / dayMinutes;
+
     return `${unitFormatter.day.format(days)} window`;
   }
 
   if (minutes % 60 === 0) {
     const hours = minutes / 60;
+
     return `${unitFormatter.hour.format(hours)} window`;
   }
 
@@ -138,14 +157,17 @@ const windowLabelFromMinutes = (minutes: number | undefined, fallback: string): 
 
 const percentageFromText = (value: string): number | undefined => {
   const normalized = value.trim();
+
   if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%?$/.test(normalized)) return undefined;
 
   const parsed = Number(normalized.replace(/%$/, ""));
+
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
 const remainingPercentage = (value: string): number | undefined => {
   const used = percentageFromText(value);
+
   return used === undefined ? undefined : Math.max(0, Math.min(100, 100 - used));
 };
 
@@ -153,11 +175,13 @@ const quotaBar = (remaining: number | undefined, width = 8): string => {
   if (remaining === undefined) return "·".repeat(width);
 
   const filled = Math.round((remaining / 100) * width);
+
   return `${"█".repeat(filled)}${"░".repeat(width - filled)}`;
 };
 
 const quotaWindowLabel = (minutes: number | undefined, fallback: string): string => {
   if (minutes === 7 * 24 * 60) return "Weekly limit";
+
   return `${windowLabelFromMinutes(minutes, fallback).replace(/\s+window$/, "")} limit`;
 };
 
@@ -169,6 +193,7 @@ type ProbeDisplaySnapshot = Omit<ProbeSnapshot, "used" | "reset" | "windowMinute
 
 export const messageFromParsed = (parsed: ProbeDisplaySnapshot): string => {
   const error = parsed.error?.trim();
+
   if (error) {
     return "quota probe failed";
   }
@@ -178,6 +203,7 @@ export const messageFromParsed = (parsed: ProbeDisplaySnapshot): string => {
   const secondWindowLabel = quotaWindowLabel(windowB, "B");
   const [usedWindowA, usedWindowB] = pairFromUnknown(parsed.used);
   const [resetWindowA, resetWindowB] = pairFromUnknown(parsed.reset);
+
   const windows = [
     {
       minutes: windowA,
@@ -192,16 +218,19 @@ export const messageFromParsed = (parsed: ProbeDisplaySnapshot): string => {
       reset: resetWindowB,
     },
   ];
+
   const visibleWindows = windows.filter(
     ({ minutes, used, reset }) =>
       minutes !== undefined || Number.parseFloat(used) !== 0 || reset !== "0m",
   );
+
   const labelWidth = Math.max(...visibleWindows.map(({ label }) => label.length));
 
   return visibleWindows
     .map(({ label, used, reset }) => {
       const remaining = remainingPercentage(used);
       const usage = remaining === undefined ? "- left" : `${Math.round(remaining)}% left`;
+
       return `${label.padEnd(labelWidth)}  ${quotaBar(remaining)} ${usage.padStart(8)} · resets ${reset}`;
     })
     .join("\n");
@@ -209,6 +238,7 @@ export const messageFromParsed = (parsed: ProbeDisplaySnapshot): string => {
 
 export const toastBodyFromParsed = (parsed: ProbeDisplaySnapshot, duration: number): ToastBody => {
   const message = messageFromParsed(parsed);
+
   return {
     title: toastTitleForStatus(parsed.status),
     message,

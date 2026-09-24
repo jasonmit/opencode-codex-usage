@@ -19,18 +19,21 @@ type RegisteredCommand = {
 test("tui plugin registers codex usage as a slash command", async () => {
   let commands: RegisteredCommand[] = [];
   const disposers: Array<() => void> = [];
+
   const api = {
     command: {
       register: (callback: () => RegisteredCommand[]) => {
         commands = callback();
         const dispose = () => undefined;
         disposers.push(dispose);
+
         return dispose;
       },
     },
     lifecycle: {
       onDispose: (dispose: () => void) => {
         disposers.push(dispose);
+
         return () => undefined;
       },
     },

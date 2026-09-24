@@ -7,7 +7,9 @@ import { resolvePollMs, resolveToastDurationMs, resolveToastThreshold } from "./
 import type { ToastBody } from "./quota-toast.js";
 
 const SIGNAL_WATCH_MS = 1500;
+
 const PropertyRecordSchema = z.record(z.string(), z.unknown());
+
 const NonEmptyStringSchema = z.string().trim().min(1);
 
 type EventProperties = {
@@ -22,11 +24,13 @@ type EventProperties = {
 
 const stringFromUnknown = (value: unknown): string | undefined => {
   const parsed = z.string().safeParse(value);
+
   return parsed.success ? parsed.data : undefined;
 };
 
 const nonEmptyStringFromUnknown = (value: unknown): string | undefined => {
   const parsed = NonEmptyStringSchema.safeParse(value);
+
   return parsed.success ? parsed.data : undefined;
 };
 
@@ -36,31 +40,41 @@ export const resolveModelFromEventProperties = (
   if (!properties) return undefined;
 
   const directModel = nonEmptyStringFromUnknown(properties.model);
+
   if (directModel) return directModel;
 
   const directModelName = nonEmptyStringFromUnknown(properties.modelName);
+
   if (directModelName) return directModelName;
 
   const directModelId = nonEmptyStringFromUnknown(properties.modelID);
+
   if (directModelId) return directModelId;
 
   const info = PropertyRecordSchema.safeParse(properties.info);
+
   if (info.success) {
     const infoModelId = nonEmptyStringFromUnknown(info.data.modelID);
+
     if (infoModelId) return infoModelId;
 
     const infoModel = PropertyRecordSchema.safeParse(info.data.model);
+
     if (infoModel.success) {
       const nestedModelId = nonEmptyStringFromUnknown(infoModel.data.modelID);
+
       if (nestedModelId) return nestedModelId;
 
       const nestedModelName = nonEmptyStringFromUnknown(infoModel.data.modelName);
+
       if (nestedModelName) return nestedModelName;
     }
   }
 
   const session = PropertyRecordSchema.safeParse(properties.session);
+
   if (!session.success) return undefined;
+
   return (
     nonEmptyStringFromUnknown(session.data.model) ??
     nonEmptyStringFromUnknown(session.data.modelName)
@@ -112,7 +126,9 @@ export const isFileWatcherEvent = (eventType: string): boolean => {
 
 export const isSupportedProbeModel = (model: string | undefined): boolean => {
   const normalized = model?.trim().toLowerCase();
+
   if (!normalized) return false;
+
   return normalized.includes("codex") || normalized.startsWith("gpt-");
 };
 
@@ -127,17 +143,20 @@ export const CodexQuotaToastPlugin = (context: PluginContext) => {
 
   const isSignalFile = (filePath: string | undefined): boolean => {
     const normalized = (filePath ?? "").replace(/\\/g, "/");
+
     return (
       normalized === signalPathNormalized ||
       normalized === signalBasename ||
       normalized.endsWith(`/${signalBasename}`)
     );
   };
+
   const monitor = createQuotaMonitor({
     probe: () => quotaProbe({ model: sessionModel }),
     notify: (body) => client.tui.showToast({ body }),
     logError: async (message, detail) => {
       if (!client.app?.log) return;
+
       try {
         await client.app.log({
           body: {
@@ -163,10 +182,12 @@ export const CodexQuotaToastPlugin = (context: PluginContext) => {
     started = true;
     monitor.start();
   };
+
   const stop = (): void => {
     started = false;
     monitor.stop();
   };
+
   const restart = (): void => {
     started = false;
     monitor.stop({ resetStatus: false });
@@ -188,23 +209,27 @@ export const CodexQuotaToastPlugin = (context: PluginContext) => {
     },
     event: ({ event }: { event: PluginEvent }) => {
       const eventModel = resolveModelFromEventProperties(event.properties);
+
       if (isSupportedProbeModel(eventModel)) {
         sessionModel = eventModel;
       }
 
       if (isSessionCreatedEvent(event.type)) {
         restart();
+
         return;
       }
 
       if (isSessionActivityEvent(event.type)) {
         start();
+
         return;
       }
 
       if (isSessionDeletedEvent(event.type)) {
         sessionModel = undefined;
         stop();
+
         return;
       }
 

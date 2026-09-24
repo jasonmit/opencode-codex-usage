@@ -13,12 +13,16 @@ test("legacy slash command displays the probe auth diagnostic in a toast", async
   await writeFile(auth, JSON.stringify({ openai: { accountId: "account" } }));
   process.env.OPENCODE_AUTH_PATH = auth;
   delete process.env.OPENCODE_CODEX_USAGE_TUI_DEBUG;
+
   type Api = Parameters<typeof CodexQuotaTuiPlugin>[0];
+
   type Toast = Parameters<Api["ui"]["toast"]>[0];
+
   let onSelect: (() => void) | undefined;
   let dispose: (() => void) | undefined;
   let showToast: (toast: Toast) => void = () => assert.fail("toast promise not initialized");
   let timeout: ReturnType<typeof setTimeout> | undefined;
+
   const toast = new Promise<Toast>((resolve, reject) => {
     showToast = resolve;
     timeout = setTimeout(
@@ -26,11 +30,13 @@ test("legacy slash command displays the probe auth diagnostic in a toast", async
       2000,
     );
   });
+
   try {
     await CodexQuotaTuiPlugin({
       command: {
         register: (commands) => {
           onSelect = commands().find((command) => command.slash.name === "codex-usage")?.onSelect;
+
           return () => undefined;
         },
       },
@@ -38,6 +44,7 @@ test("legacy slash command displays the probe auth diagnostic in a toast", async
       lifecycle: {
         onDispose: (cleanup) => {
           dispose = cleanup;
+
           return () => undefined;
         },
       },
@@ -50,8 +57,10 @@ test("legacy slash command displays the probe auth diagnostic in a toast", async
   } finally {
     clearTimeout(timeout);
     dispose?.();
+
     if (previousAuth === undefined) delete process.env.OPENCODE_AUTH_PATH;
     else process.env.OPENCODE_AUTH_PATH = previousAuth;
+
     if (previousDebug === undefined) delete process.env.OPENCODE_CODEX_USAGE_TUI_DEBUG;
     else process.env.OPENCODE_CODEX_USAGE_TUI_DEBUG = previousDebug;
     await rm(directory, { recursive: true, force: true });

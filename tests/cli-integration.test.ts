@@ -36,10 +36,12 @@ test("V2 CLI queries the server RPC without legacy credentials and forwards retr
 test("V2 CLI formats RPC quota as readable output", async (t) => {
   const state = await fixture();
   t.after(state.cleanup);
+
   const host = await fakeOpenCode(
     state,
     JSON.stringify({ output: { status: "ok", used: { primary: 23, secondary: 4 } } }),
   );
+
   const result = state.run(["--pretty", "--no-notify"], host.env);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /23%/);
@@ -55,11 +57,13 @@ test("V2 CLI formats RPC quota as readable output", async (t) => {
 test("V2 CLI preserves upstream auth error detail", async (t) => {
   const state = await fixture();
   t.after(state.cleanup);
+
   const snapshot = {
     status: "error",
     statusCode: 401,
     error: "Provided authentication token is expired",
   };
+
   const host = await fakeOpenCode(state, JSON.stringify({ output: snapshot }));
   const result = state.run(["--json", "--no-notify"], host.env);
   assert.equal(result.status, 1);
@@ -80,10 +84,12 @@ test("V2 CLI reports RPC transport errors without falling back to legacy auth", 
 test("V2 CLI rejects malformed RPC output", async (t) => {
   const state = await fixture();
   t.after(state.cleanup);
+
   const host = await fakeOpenCode(
     state,
     '{"output":{"status":"ok","used":{"primary":"invalid","secondary":0}}}',
   );
+
   const result = state.run(["--json", "--no-notify"], host.env);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /invalid.*quota.*response/i);

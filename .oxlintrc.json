@@ -1,0 +1,9 @@
+{
+  "ignorePatterns": [".opencode/**", ".superpowers/**", "tools/oxlint/readable-spacing/**"],
+  "jsPlugins": [
+    { "name": "readable-spacing", "specifier": "./tools/oxlint/readable-spacing/index.ts" }
+  ],
+  "rules": {
+    "readable-spacing/require-readable-spacing": "error"
+  }
+}

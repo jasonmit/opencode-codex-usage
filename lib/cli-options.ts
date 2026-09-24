@@ -44,18 +44,23 @@ export const wantsJsonOutput = (argv: string[]): boolean => {
 
 const parseRetryCount = (raw: string): number => {
   const normalized = raw.trim();
+
   if (!/^\d+$/.test(normalized)) {
     throw new Error("--retry requires an integer between 0 and 2");
   }
+
   const parsed = Number.parseInt(normalized, 10);
+
   if (parsed < 0 || parsed > 2) {
     throw new Error("--retry requires a value between 0 and 2");
   }
+
   return parsed;
 };
 
 const parseOpenCodeVersion = (raw: string): 1 | 2 => {
   if (raw === "1") return 1;
+
   if (raw === "2") return 2;
   throw new Error("--opencode must be 1 or 2");
 };
@@ -73,6 +78,7 @@ export const parseCliOptions = (argv: string[]): CliOptions => {
 
   for (let idx = 0; idx < argv.length; idx += 1) {
     const arg = argv[idx] ?? "";
+
     if (arg === "--no-notify") {
       noNotify = true;
       continue;
@@ -106,9 +112,11 @@ export const parseCliOptions = (argv: string[]): CliOptions => {
 
     if (arg === "--retry") {
       const rawValue = argv[idx + 1];
+
       if (!rawValue || rawValue.startsWith("--")) {
         throw new Error("--retry requires a value");
       }
+
       retryCount = parseRetryCount(rawValue);
       idx += 1;
       continue;
@@ -121,9 +129,11 @@ export const parseCliOptions = (argv: string[]): CliOptions => {
 
     if (arg === "--config") {
       const rawValue = argv[idx + 1];
+
       if (!rawValue || rawValue.startsWith("--")) {
         throw new Error("--config requires a value");
       }
+
       configPath = rawValue;
       idx += 1;
       continue;
@@ -136,9 +146,11 @@ export const parseCliOptions = (argv: string[]): CliOptions => {
 
     if (arg === "--opencode") {
       const rawValue = argv[idx + 1];
+
       if (!rawValue || rawValue.startsWith("--")) {
         throw new Error("--opencode requires a value");
       }
+
       opencodeVersion = parseOpenCodeVersion(rawValue);
       idx += 1;
       continue;

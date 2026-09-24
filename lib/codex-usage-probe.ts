@@ -47,6 +47,7 @@ const NonEmptyStringSchema = z.string().trim().min(1);
 
 const parseAuthFile = (raw: string): AuthFile => {
   const validated = AuthSchema.safeParse(JSON.parse(raw));
+
   if (!validated.success) {
     throw new Error("invalid auth file shape");
   }
@@ -59,10 +60,15 @@ const errorMessage = (error: unknown): string => {
 };
 
 const CODEX_URL = "https://chatgpt.com/backend-api/codex/responses";
+
 const CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models?client_version=1.0.0";
+
 const REQUEST_TIMEOUT_MS = 15_000;
+
 const RETRY_COUNT_ENV = "OPENCODE_CODEX_QUOTA_RETRY_COUNT";
+
 const MODEL_ENV = "OPENCODE_CODEX_QUOTA_MODEL";
+
 const MAX_RETRY_COUNT = 2;
 
 type WindowPair<T> = {
@@ -121,34 +127,43 @@ const toProbeError = (
     status,
     error: detail,
   };
+
   if (statusCode !== undefined) snapshot.statusCode = statusCode;
+
   return snapshot;
 };
 
 const parseOptionalInt = (raw: string): number | null => {
   const parsed = Number.parseInt(raw, 10);
+
   return Number.isFinite(parsed) ? parsed : null;
 };
 
 export const normalizeUsagePercent = (raw: string): number | null => {
   const parsed = Number.parseFloat(raw.trim());
+
   if (!Number.isFinite(parsed)) return null;
 
   const bounded = Math.max(0, Math.min(100, parsed));
+
   return Math.round(bounded);
 };
 
 export const normalizeResetValue = (raw: string, nowMs = Date.now()): string | null => {
   const trimmed = raw.trim();
+
   if (trimmed === "") return null;
 
   const parsed = Number.parseFloat(trimmed);
+
   if (!Number.isFinite(parsed)) {
     const fallback = durationText(trimmed);
+
     return fallback === "-" ? null : fallback;
   }
 
   let secondsRemaining = parsed;
+
   if (parsed > 1_000_000_000_000) {
     secondsRemaining = (parsed - nowMs) / 1000;
   } else if (parsed > 1_000_000_000) {
@@ -156,6 +171,7 @@ export const normalizeResetValue = (raw: string, nowMs = Date.now()): string | n
   }
 
   const value = durationText(String(Math.max(0, Math.floor(secondsRemaining))));
+
   return value === "-" ? null : value;
 };
 
@@ -165,7 +181,9 @@ const parseOptionalDuration = (secondsRaw: string, nowMs: number): string | null
 
 const parseRetryCount = (raw: string | undefined, fallback = 1): number => {
   const parsed = Number.parseInt((raw ?? "").trim(), 10);
+
   if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+
   return Math.min(parsed, MAX_RETRY_COUNT);
 };
 
@@ -178,6 +196,7 @@ export const resolveProbeRetryCount = (
 
 export const resolveProbeModel = (env: NodeJS.ProcessEnv = process.env, fallback = ""): string => {
   const configured = env[MODEL_ENV]?.trim();
+
   return configured && configured !== "" ? configured : fallback;
 };
 
@@ -207,27 +226,34 @@ const resolveSupportedProbeModels = async (
     responseText = await response.text();
   } catch (error) {
     const detail = errorMessage(error);
+
     return toProbeError("error", detail.slice(0, 120), "network");
   }
 
   if (!response.ok) {
     const detail = parseProbeErrorDetail(responseText).slice(0, 240);
+
     return toProbeError("error", detail, response.status);
   }
 
   try {
     const parsed = CodexModelsResponseSchema.safeParse(JSON.parse(responseText));
+
     if (!parsed.success) {
       return toProbeError("error", "invalid Codex models response", "model");
     }
 
     const models: string[] = [];
+
     for (const entry of parsed.data.models) {
       const modelEntry = CodexModelSchema.safeParse(entry);
+
       if (!modelEntry.success) continue;
       const model = modelEntry.data.slug.trim();
+
       if (model !== "") models.push(model);
     }
+
     if (models.length > 0) return models;
   } catch {
     return toProbeError("error", "invalid Codex models response", "model");
@@ -242,7 +268,9 @@ const resolveDefaultProbeModel = async (
   fetchImpl: typeof fetch,
 ): Promise<string | ProbeSnapshot> => {
   const supportedModels = await resolveSupportedProbeModels(access, accountId, fetchImpl);
+
   if ("status" in supportedModels) return supportedModels;
+
   return (
     supportedModels[0] ??
     toProbeError("error", "no supported Codex models returned for this account", "model")
@@ -258,9 +286,11 @@ const canonicalizeConfiguredProbeModel = async (
   if (!shouldCanonicalizeConfiguredModel(model)) return model;
 
   const supportedModels = await resolveSupportedProbeModels(access, accountId, fetchImpl);
+
   if ("status" in supportedModels) return model;
 
   const sorted = [...supportedModels].sort((left, right) => right.length - left.length);
+
   return (
     sorted.find((supported) => model === supported || model.startsWith(`${supported}-`)) ?? model
   );
@@ -268,22 +298,28 @@ const canonicalizeConfiguredProbeModel = async (
 
 const parseProbeErrorDetail = (raw: string): string => {
   const trimmed = raw.trim();
+
   if (trimmed === "") return "empty error response";
 
   try {
     const parsed = ProbeErrorSchema.safeParse(JSON.parse(trimmed));
+
     if (!parsed.success) return trimmed.replace(/\s+/g, " ");
 
     const detail = NonEmptyStringSchema.safeParse(parsed.data.detail);
+
     if (detail.success) return detail.data;
 
     const nestedError = NestedProbeErrorSchema.safeParse(parsed.data.error);
+
     const nestedMessage = NonEmptyStringSchema.safeParse(
       nestedError.success ? nestedError.data.message : undefined,
     );
+
     if (nestedMessage.success) return nestedMessage.data;
 
     const message = NonEmptyStringSchema.safeParse(parsed.data.message);
+
     if (message.success) return message.data;
   } catch {
     // Not JSON. Fall back to compact text.
@@ -294,32 +330,41 @@ const parseProbeErrorDetail = (raw: string): string => {
 
 const shouldRetryStatusCode = (statusCode: number | string | undefined): boolean => {
   if (statusCode === "network" || statusCode === "timeout") return true;
+
   if (typeof statusCode === "number") {
     if (statusCode >= 500) return true;
+
     if (statusCode === 408 || statusCode === 409 || statusCode === 425 || statusCode === 429) {
       return true;
     }
   }
+
   return false;
 };
 
 export const isRetryableProbeFailure = (snapshot: ProbeSnapshot): boolean => {
   if (statusState(snapshot.status) !== "error") return false;
+
   return shouldRetryStatusCode(snapshot.statusCode);
 };
 
 const percentText = (value: number | null | undefined): string => {
   if (!Number.isFinite(value ?? Number.NaN)) return "-";
   const bounded = Math.max(0, Math.min(100, Number(value)));
+
   return `${Math.round(bounded)}%`;
 };
 
 const windowLabel = (minutes: number | null | undefined, fallback: string): string => {
   if (!Number.isFinite(minutes ?? Number.NaN)) return fallback;
   const value = Number(minutes);
+
   if (value <= 0) return fallback;
+
   if (value % (24 * 60) === 0) return `${value / (24 * 60)}d window`;
+
   if (value % 60 === 0) return `${value / 60}h window`;
+
   return `${value}m window`;
 };
 
@@ -327,6 +372,7 @@ const usageBar = (value: number | null | undefined, width = 20): string => {
   if (!Number.isFinite(value ?? Number.NaN)) return `[${"-".repeat(width)}]`;
   const bounded = Math.max(0, Math.min(100, Number(value)));
   const filled = Math.round((bounded / 100) * width);
+
   return `[${"#".repeat(filled)}${"-".repeat(width - filled)}]`;
 };
 
@@ -339,28 +385,39 @@ const prettyLine = (
   const usage = percentText(used);
   const resetText = reset && reset.trim() !== "" ? reset : "-";
   const title = `${label}:`.padEnd(labelWidth + 2);
+
   return `${title}${usageBar(used)} ${usage.padStart(4)}  ⏳ ${resetText}`;
 };
 
 const prettyMetaLine = (label: string, labelWidth: number, value: string): string => {
   const title = `${label}:`.padEnd(labelWidth + 2);
+
   return `${title}${value}`;
 };
 
 const prettyState = (status: string): string => {
   const upper = status.toUpperCase();
+
   if (upper === "OK") return upper;
+
   if (upper === "WARN") return upper;
+
   if (upper === "CRITICAL") return upper;
+
   if (upper === "ERROR") return upper;
+
   return "UNKNOWN";
 };
 
 const statusEmoji = (state: string): string => {
   if (state === "OK") return "✅";
+
   if (state === "WARN") return "⚠️";
+
   if (state === "CRITICAL") return "🚨";
+
   if (state === "ERROR") return "🚨";
+
   return "❓";
 };
 
@@ -393,6 +450,7 @@ const formatPrettyProbeOutput = (snapshot: ProbeSnapshot): string => {
 
   const primaryLabel = windowLabel(windowMinutes.primary, "window A");
   const secondaryLabel = windowLabel(windowMinutes.secondary, "window B");
+
   const labelWidth = Math.max(
     "codex quota".length,
     "status code".length,
@@ -421,6 +479,7 @@ export const formatProbeOutput = (
   options: { pretty?: boolean; printJson?: boolean } = {},
 ): string => {
   if (options.pretty) return formatPrettyProbeOutput(snapshot);
+
   return JSON.stringify(snapshot, null, options.printJson ? 2 : 0);
 };
 
@@ -429,9 +488,11 @@ const loadCredentials = async (
 ): Promise<{ access: string; accountId: string } | ProbeSnapshot> => {
   if (options.credentials) {
     const access = options.credentials.accessToken.trim();
+
     if (access === "") {
       return toProbeError("error", "missing access token", "auth");
     }
+
     return { access, accountId: options.credentials.accountId ?? "" };
   }
 
@@ -450,6 +511,7 @@ const loadCredentials = async (
     }
   } catch (error) {
     const detail = errorMessage(error);
+
     return toProbeError("error", detail.slice(0, 120), "auth");
   }
 
@@ -501,11 +563,13 @@ const runProbeAttempt = async (
     }
 
     const detail = errorMessage(error);
+
     return toProbeError("error", detail.slice(0, 120), "network");
   }
 
   if (!response.ok) {
     const detail = parseProbeErrorDetail(responseText).slice(0, 240);
+
     return toProbeError("error", detail, response.status);
   }
 
@@ -520,13 +584,16 @@ const runProbeAttempt = async (
   const profile = val(response.headers, "x-codex-bengalfox-limit-name");
   const probeTokens = usage?.total_tokens ?? 0;
   const primaryUsed = normalizeUsagePercent(primaryUsedRaw) ?? parseOptionalInt(primaryUsedRaw);
+
   const secondaryUsed =
     normalizeUsagePercent(secondaryUsedRaw) ?? parseOptionalInt(secondaryUsedRaw);
+
   const primaryReset = parseOptionalDuration(primaryResetSeconds, options.nowMs);
   const secondaryReset = parseOptionalDuration(secondaryResetSeconds, options.nowMs);
   const primaryWindowMinutes = parseOptionalInt(primaryWindowMinutesRaw);
   const secondaryWindowMinutes = parseOptionalInt(secondaryWindowMinutesRaw);
   const hasWindowMinutes = primaryWindowMinutes !== null || secondaryWindowMinutes !== null;
+
   const state =
     primaryUsed !== null && secondaryUsed !== null
       ? healthLabel(String(primaryUsed), String(secondaryUsed))
@@ -541,26 +608,31 @@ const runProbeAttempt = async (
     reset: { primary: primaryReset, secondary: secondaryReset },
     probeTokens,
   };
+
   if (hasWindowMinutes) {
     snapshot.windowMinutes = {
       primary: primaryWindowMinutes,
       secondary: secondaryWindowMinutes,
     };
   }
+
   return snapshot;
 };
 
 export const probeQuota = async (options: ProbeQuotaOptions = {}): Promise<ProbeSnapshot> => {
   const configuredModel = options.model?.trim() || resolveProbeModel(options.env);
+
   const retryCount = Math.min(
     options.retryCount ?? resolveProbeRetryCount(options.env),
     MAX_RETRY_COUNT,
   );
+
   const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
   const fetchImpl = options.fetchImpl ?? fetch;
   const nowMs = Date.now();
 
   const credentials = await loadCredentials(options);
+
   if ("status" in credentials) {
     return credentials;
   }
@@ -573,6 +645,7 @@ export const probeQuota = async (options: ProbeQuotaOptions = {}): Promise<Probe
         fetchImpl,
       )
     : await resolveDefaultProbeModel(credentials.access, credentials.accountId, fetchImpl);
+
   if (typeof resolvedModel !== "string") return resolvedModel;
 
   let snapshot = await runProbeAttempt(credentials.access, credentials.accountId, {

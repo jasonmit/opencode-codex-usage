@@ -11,6 +11,7 @@ test("missing legacy credentials retain the V1 auth diagnostic", async () => {
   await writeFile(authPath, JSON.stringify({ openai: { accountId: "account" } }));
   const previous = process.env.OPENCODE_AUTH_PATH;
   process.env.OPENCODE_AUTH_PATH = authPath;
+
   try {
     const result = await probeQuota();
     assert.equal(result.statusCode, "auth");
@@ -27,11 +28,13 @@ test("HTTP 401 retains the upstream status and detail", async () => {
       status: 401,
       headers: { "content-type": "application/json" },
     });
+
   const result = await probeQuota({
     credentials: { accessToken: "expired-token", accountId: "account" },
     fetchImpl,
     model: "gpt-5-codex",
   });
+
   assert.equal(result.statusCode, 401);
   assert.equal(result.error, "Provided authentication token is expired");
 });
@@ -42,10 +45,12 @@ test("model discovery 401 retains the upstream status and detail", async () => {
       status: 401,
       headers: { "content-type": "application/json" },
     });
+
   const result = await probeQuota({
     credentials: { accessToken: "expired-token", accountId: "account" },
     fetchImpl,
   });
+
   assert.equal(result.statusCode, 401);
   assert.equal(result.error, "Unauthorized");
 });

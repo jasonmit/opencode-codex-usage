@@ -25,12 +25,15 @@ const activeCredentials = async (
   ctx: Plugin.Context,
 ): Promise<ProbeQuotaOptions["credentials"] | undefined> => {
   const connection = await ctx.integration.connection.active("openai");
+
   if (!connection) return undefined;
 
   const credential = await ctx.integration.connection.resolve(connection);
+
   if (credential?.type !== "oauth") return undefined;
 
   const accountId = credential.metadata?.accountID ?? credential.metadata?.accountId;
+
   return {
     accessToken: credential.access,
     accountId: typeof accountId === "string" ? accountId : undefined,
@@ -42,23 +45,32 @@ export const createOpenCode2Plugin = (probe: QuotaProbe = probeQuota) =>
     id: "opencode-codex-usage",
     async setup(ctx) {
       const disposers: Array<() => Promise<void>> = [];
+
       const readQuota = async (input: UsageRequest) => {
         const credentials = await activeCredentials(ctx);
+
         if (!credentials) return NO_ACTIVE_OPENAI_CONNECTION;
+
         return probe({ ...input, credentials });
       };
+
       try {
         const rpcRegistration = await ctx.rpc.register(CODEX_USAGE_RPC, {
           usage: readQuota,
           pollingEligible: async ({ sessionID }) => {
             const session = await ctx.session.get({ sessionID });
+
             const model =
               session.model ?? (await ctx.model.default({ location: session.location })).data;
+
             if (model?.providerID !== "openai") return false;
+
             return (await activeCredentials(ctx)) !== undefined;
           },
         });
+
         disposers.push(() => rpcRegistration.dispose());
+
         const toolRegistration = await ctx.tool.transform((editor) =>
           editor.add({
             name: "codex_usage",
@@ -67,11 +79,13 @@ export const createOpenCode2Plugin = (probe: QuotaProbe = probeQuota) =>
             execute: async () => ({ content: JSON.stringify(await readQuota({})) }),
           }),
         );
+
         disposers.push(() => toolRegistration.dispose());
       } catch (error) {
         await Promise.allSettled([...disposers].reverse().map((dispose) => dispose()));
         throw error;
       }
+
       let disposed = false;
 
       return async () => {

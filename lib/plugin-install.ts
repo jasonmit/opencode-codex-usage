@@ -18,6 +18,7 @@ const resolveTuiConfigPath = (configPath: string, opencodeVersion: 1 | 2): strin
 
 const pluginPathFromModule = (): string => {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+
   return path.resolve(moduleDir, "..", "..");
 };
 
@@ -50,6 +51,7 @@ const prepareInstall = async (
     ${pluginPathLiteral}
   ]
 }\n`;
+
     return {
       configPath,
       content: freshConfig,
@@ -59,6 +61,7 @@ const prepareInstall = async (
 
   const content = preparedContent ?? (await readFile(configPath, "utf8"));
   const nextContent = addPluginEntry(content, configPath, pluginPath, property);
+
   if (nextContent === content) return { configPath };
   parseConfig(nextContent, configPath);
 
@@ -110,21 +113,26 @@ export const configurePlugins = async (
   const prepare = options.install ? prepareInstall : prepareUninstall;
   // Validate both inputs and their edits before creating directories or writing either file.
   const serverUpdate = await prepare(configPath, serverPlugin, property);
+
   const tuiUpdate = await prepare(
     tuiConfigPath,
     tuiPlugin,
     property,
     configPath === tuiConfigPath ? serverUpdate.content : undefined,
   );
+
   const updates = [serverUpdate, tuiUpdate];
+
   for (const update of updates) {
     if (update.content === undefined) continue;
     await mkdir(path.dirname(update.configPath), { recursive: true });
     await writeFile(update.configPath, update.content, "utf8");
   }
+
   if (options.install && updates.every((update) => update.content === undefined)) {
     process.stdout.write(`No changes needed. Server and TUI plugins are already configured.\n`);
   }
+
   for (const update of updates) {
     if (update.message) process.stdout.write(update.message);
   }

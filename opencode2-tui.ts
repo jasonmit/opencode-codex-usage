@@ -16,6 +16,7 @@ import {
 } from "./lib/quota-settings.js";
 
 type QuotaProbe = () => Promise<ProbeSnapshot>;
+
 type MonitorFactory = (options: QuotaMonitorOptions) => QuotaMonitor;
 
 export const createOpenCode2TuiPlugin = (
@@ -27,8 +28,10 @@ export const createOpenCode2TuiPlugin = (
     setup(ctx) {
       const debugPath = process.env.OPENCODE_CODEX_QUOTA_DEBUG_FILE?.trim();
       let debugErrorReported = false;
+
       const recordPolling = (event: string) => {
         if (!debugPath) return;
+
         try {
           appendFileSync(debugPath, `${new Date().toISOString()} ${event}\n`, { mode: 0o600 });
         } catch (error: unknown) {
@@ -38,12 +41,15 @@ export const createOpenCode2TuiPlugin = (
           console.error(`[opencode-codex-usage] polling diagnostic write failed: ${detail}`);
         }
       };
+
       const quotaProbe: QuotaProbe =
         probe ??
         (async () => {
           const snapshot = await ctx.client.rpc(CODEX_USAGE_RPC).usage({});
+
           return ProbeSnapshotSchema.parse(snapshot);
         });
+
       const monitorOptions = {
         probe: quotaProbe,
         notify: (toast) => ctx.ui.toast.show(toast),
@@ -55,19 +61,24 @@ export const createOpenCode2TuiPlugin = (
         durationMs: resolveToastDurationMs(),
         signalPath: resolveSignalPath(),
       } satisfies QuotaMonitorOptions;
+
       const monitor = createMonitor({ ...monitorOptions, onDiagnostic: recordPolling });
       // Explicit checks have no timers and survive pauses of the automatic monitor.
       const manualMonitor = createMonitor(monitorOptions);
       let disposed = false;
+
       const releaseSlot = ctx.ui.slot({
         append: "app",
         render: () => {
           // Reading the cached selection reactively catches model switches as well as navigation.
           const selected = createMemo(() => {
             const route = ctx.ui.router.current();
+
             if (route.type !== "session") return undefined;
             const session = ctx.data.session.get(route.sessionID);
+
             if (!session) return undefined;
+
             return {
               sessionID: route.sessionID,
               providerID: session.model?.providerID,
@@ -75,6 +86,7 @@ export const createOpenCode2TuiPlugin = (
               location: { directory: session.location.directory },
             };
           });
+
           const [revision, invalidate] = createSignal(0);
           onCleanup(
             ctx.data.listen(({ details }) => {
@@ -84,6 +96,7 @@ export const createOpenCode2TuiPlugin = (
                 details.location.directory !== selected()?.location.directory
               )
                 return;
+
               switch (details.type) {
                 case "credential.updated":
                 case "credential.switched":
@@ -98,24 +111,32 @@ export const createOpenCode2TuiPlugin = (
             }),
           );
           let polling = false;
+
           const setPolling = (enabled: boolean) => {
             if (polling === enabled) return;
             polling = enabled;
+
             if (enabled) monitor.start();
             else monitor.stop({ resetStatus: false });
           };
+
           onCleanup(() => setPolling(false));
           createEffect(() => {
             revision();
             const selection = selected();
+
             if (!selection || disposed) {
               setPolling(false);
+
               return;
             }
+
             if (selection.providerID && selection.providerID !== "openai") {
               setPolling(false);
+
               return;
             }
+
             let current = true;
             onCleanup(() => {
               current = false;
@@ -149,6 +170,7 @@ export const createOpenCode2TuiPlugin = (
               },
             ],
           }));
+
           return null;
         },
       });

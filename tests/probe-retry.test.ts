@@ -7,6 +7,7 @@ const ProbeRequestSchema = z.object({ model: z.string().optional() });
 
 const urlFromFetchInput = (input: Parameters<typeof fetch>[0]): string => {
   if (typeof input === "string") return input;
+
   return input instanceof URL ? input.href : input.url;
 };
 
@@ -14,6 +15,7 @@ const probeRequestFromInit = (init: Parameters<typeof fetch>[1]) => {
   if (typeof init?.body !== "string") {
     throw new Error("expected string request body");
   }
+
   return ProbeRequestSchema.parse(JSON.parse(init.body));
 };
 
@@ -35,11 +37,14 @@ const successResponse = (): Response => {
 
 test("probeQuota retries once on network failure", async () => {
   let calls = 0;
+
   const fetchImpl: typeof fetch = async () => {
     calls += 1;
+
     if (calls === 1) {
       throw new Error("network down");
     }
+
     return successResponse();
   };
 
@@ -57,8 +62,10 @@ test("probeQuota retries once on network failure", async () => {
 
 test("probeQuota does not retry auth/http 401 failures", async () => {
   let calls = 0;
+
   const fetchImpl: typeof fetch = async () => {
     calls += 1;
+
     return new Response("unauthorized", { status: 401 });
   };
 
@@ -77,12 +84,14 @@ test("probeQuota does not retry auth/http 401 failures", async () => {
 test("probeQuota uses supported default model for ChatGPT account auth", async () => {
   const seenModels: string[] = [];
   const seenUrls: string[] = [];
+
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = urlFromFetchInput(input);
     seenUrls.push(url);
 
     if (url.includes("/codex/models")) {
       assert.match(url, /client_version=1\.0\.0/);
+
       return new Response(JSON.stringify({ models: [{ slug: "gpt-5.5" }] }), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -119,6 +128,7 @@ test("probeQuota uses supported default model for ChatGPT account auth", async (
 
 test("probeQuota ignores malformed model entries before a supported model", async () => {
   let selectedModel = "";
+
   const fetchImpl: typeof fetch = async (input, init) => {
     if (urlFromFetchInput(input).includes("/codex/models")) {
       return new Response(JSON.stringify({ models: [null, { slug: 42 }, { slug: "gpt-5.5" }] }), {
@@ -129,6 +139,7 @@ test("probeQuota ignores malformed model entries before a supported model", asyn
 
     const body = probeRequestFromInit(init);
     selectedModel = body.model ?? "";
+
     return successResponse();
   };
 
@@ -144,6 +155,7 @@ test("probeQuota ignores malformed model entries before a supported model", asyn
 
 test("probeQuota canonicalizes OpenCode model variants to supported Codex slugs", async () => {
   const seenModels: string[] = [];
+
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = urlFromFetchInput(input);
 
@@ -156,6 +168,7 @@ test("probeQuota canonicalizes OpenCode model variants to supported Codex slugs"
 
     const body = probeRequestFromInit(init);
     seenModels.push(body.model ?? "");
+
     if (body.model === "gpt-5.5-fast") {
       return new Response(
         JSON.stringify({
@@ -220,9 +233,11 @@ test("probeQuota uses a valid error message when another error field is malforme
 
 test("probeQuota honors OPENCODE_CODEX_QUOTA_MODEL env override", async () => {
   const seenModels: string[] = [];
+
   const fetchImpl: typeof fetch = async (_input, init) => {
     const body = probeRequestFromInit(init);
     seenModels.push(body.model ?? "");
+
     return successResponse();
   };
 
@@ -238,9 +253,11 @@ test("probeQuota honors OPENCODE_CODEX_QUOTA_MODEL env override", async () => {
 
 test("probeQuota model option overrides env model", async () => {
   const seenModels: string[] = [];
+
   const fetchImpl: typeof fetch = async (_input, init) => {
     const body = probeRequestFromInit(init);
     seenModels.push(body.model ?? "");
+
     return successResponse();
   };
 
@@ -257,6 +274,7 @@ test("probeQuota model option overrides env model", async () => {
 
 test("probeQuota does not retry when retry count is disabled", async () => {
   let calls = 0;
+
   const fetchImpl: typeof fetch = async () => {
     calls += 1;
     throw new Error("network down");

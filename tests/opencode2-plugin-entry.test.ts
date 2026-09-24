@@ -4,6 +4,7 @@ import { createOpenCode2Plugin } from "#root/opencode2.js";
 import { test } from "./test.ts";
 
 type ToolEditor = Parameters<Parameters<Plugin.Context["tool"]["transform"]>[0]>[0];
+
 type RegisteredTool = Parameters<ToolEditor["add"]>[0];
 
 const executeTool = (tool: RegisteredTool | undefined) => {
@@ -33,6 +34,7 @@ const makeContext = (options?: {
     model: {
       default: async (input: { location: { directory: string } }) => {
         options?.onDefaultLocation?.(input.location);
+
         return { location: input.location, data: options?.defaultModel ?? null };
       },
     },
@@ -47,6 +49,7 @@ const makeContext = (options?: {
           update: () => undefined,
           remove: () => undefined,
         });
+
         return {
           dispose: async () => options?.onToolDispose?.(),
         };
@@ -55,6 +58,7 @@ const makeContext = (options?: {
     event: {
       subscribe: () => {
         options?.onSubscribe?.();
+
         return {
           async *[Symbol.asyncIterator]() {
             yield* [];
@@ -77,7 +81,9 @@ const makeContext = (options?: {
         },
       ) => {
         options?.onRpcHandler?.(handlers.usage);
+
         if (handlers.pollingEligible) options?.onPollingHandler?.(handlers.pollingEligible);
+
         return {
           dispose: async () => options?.onRpcDispose?.(),
           events: { emit: async () => undefined },
@@ -85,6 +91,7 @@ const makeContext = (options?: {
       },
     },
   };
+
   // SAFETY: setup and its registered handlers only access the domains implemented by this host fake.
   const context = host as typeof host & Plugin.Context;
 
@@ -95,6 +102,7 @@ test("OpenCode 2 plugin registers the official codex_usage tool result", async (
   let registeredTool: RegisteredTool | undefined;
   let toolDisposed = false;
   const plugin = createOpenCode2Plugin(async () => ({ status: "ok" }));
+
   const { context } = makeContext({
     onTool: (tool) => {
       registeredTool = tool;
@@ -135,10 +143,13 @@ test("OpenCode 2 polling eligibility uses the session model before the location 
   ] as const) {
     let handler: ((input: { sessionID: string }) => Promise<boolean>) | undefined;
     let probes = 0;
+
     const plugin = createOpenCode2Plugin(async () => {
       probes++;
+
       return { status: "ok" };
     });
+
     const { context } = makeContext({
       sessionModel: { providerID, id: "model-without-codex-in-its-name" },
       defaultModel: { providerID: providerID === "openai" ? "anthropic" : "openai", id: "default" },
@@ -149,7 +160,9 @@ test("OpenCode 2 polling eligibility uses the session model before the location 
         handler = value;
       },
     });
+
     const cleanup = await plugin.setup(context);
+
     try {
       assert.ok(handler, "expected polling eligibility RPC");
       assert.equal(await handler({ sessionID: "ses_current" }), eligible);
@@ -164,6 +177,7 @@ test("OpenCode 2 polling eligibility resolves inherited defaults at the session 
   for (const providerID of ["openai", "opencode", undefined]) {
     let handler: ((input: { sessionID: string }) => Promise<boolean>) | undefined;
     const locations: Array<{ directory: string }> = [];
+
     const { context } = makeContext({
       defaultModel: providerID ? { providerID, id: "default" } : null,
       onDefaultLocation: (location) => locations.push(location),
@@ -173,7 +187,9 @@ test("OpenCode 2 polling eligibility resolves inherited defaults at the session 
         handler = value;
       },
     });
+
     const cleanup = await createOpenCode2Plugin().setup(context);
+
     try {
       assert.ok(handler, "expected polling eligibility RPC");
       assert.equal(await handler({ sessionID: "ses_current" }), providerID === "openai");
@@ -188,6 +204,7 @@ test("OpenCode 2 polling eligibility requires the current OpenAI OAuth connectio
   let handler: ((input: { sessionID: string }) => Promise<boolean>) | undefined;
   let connected = false;
   let oauth = false;
+
   const { context } = makeContext({
     sessionModel: { providerID: "openai", id: "gpt" },
     activeConnection: async () =>
@@ -198,7 +215,9 @@ test("OpenCode 2 polling eligibility requires the current OpenAI OAuth connectio
       handler = value;
     },
   });
+
   const cleanup = await createOpenCode2Plugin().setup(context);
+
   try {
     assert.ok(handler, "expected polling eligibility RPC");
     assert.equal(await handler({ sessionID: "ses_current" }), false);
@@ -218,6 +237,7 @@ test("OpenCode 2 releases registrations once without subscribing to unused event
   let toolsDisposed = 0;
   let rpcsDisposed = 0;
   const plugin = createOpenCode2Plugin(async () => ({ status: "ok" }));
+
   const { context } = makeContext({
     onSubscribe: () => subscriptions++,
     onToolDispose: () => toolsDisposed++,
@@ -236,10 +256,13 @@ test("OpenCode 2 tool follows the active OAuth credential on every call", async 
   let registeredTool: RegisteredTool | undefined;
   let activeID = "first";
   const probes: unknown[] = [];
+
   const plugin = createOpenCode2Plugin(async (options) => {
     probes.push(options);
+
     return { status: "ok" };
   });
+
   const { context } = makeContext({
     onTool: (tool) => {
       registeredTool = tool;
@@ -270,10 +293,13 @@ test("OpenCode 2 tool follows the active OAuth credential on every call", async 
 test("OpenCode 2 never falls back to legacy credentials without active OAuth", async () => {
   let registeredTool: RegisteredTool | undefined;
   let probes = 0;
+
   const plugin = createOpenCode2Plugin(async () => {
     probes++;
+
     return { status: "ok" };
   });
+
   const { context } = makeContext({
     onTool: (tool) => {
       registeredTool = tool;
@@ -286,6 +312,7 @@ test("OpenCode 2 never falls back to legacy credentials without active OAuth", a
   assert.equal(probes, 0);
   const content = result?.content;
   assert.equal(typeof content, "string");
+
   if (typeof content !== "string") assert.fail("expected text tool content");
   assert.match(content, /active OpenAI OAuth connection/i);
   await cleanup?.();
@@ -294,6 +321,7 @@ test("OpenCode 2 never falls back to legacy credentials without active OAuth", a
 test("OpenCode 2 setup rolls back acquired resources when registration fails", async () => {
   let rpcDisposed = false;
   const plugin = createOpenCode2Plugin(async () => ({ status: "ok" }));
+
   const { context } = makeContext({
     onRpcDispose: () => {
       rpcDisposed = true;
@@ -308,9 +336,11 @@ test("OpenCode 2 setup rolls back acquired resources when registration fails", a
 test("OpenCode 2 RPC shares active-credential quota probing with the TUI", async () => {
   let rpcHandler: ((input: { retryCount?: number }) => Promise<unknown>) | undefined;
   let rpcDisposed = false;
+
   const plugin = createOpenCode2Plugin(async (options) => ({
     status: options?.credentials?.accessToken ?? "missing",
   }));
+
   const { context } = makeContext({
     activeConnection: async () => ({ id: "active" }),
     resolveConnection: async () => ({
@@ -338,10 +368,13 @@ test("OpenCode 2 RPC shares active-credential quota probing with the TUI", async
 test("OpenCode 2 RPC forwards an explicit retry count to the quota probe", async () => {
   let rpcHandler: ((input: { retryCount?: number }) => Promise<unknown>) | undefined;
   const probes: unknown[] = [];
+
   const plugin = createOpenCode2Plugin(async (options) => {
     probes.push(options);
+
     return { status: "ok" };
   });
+
   const { context } = makeContext({
     activeConnection: async () => ({ id: "active" }),
     resolveConnection: async () => ({
@@ -353,7 +386,9 @@ test("OpenCode 2 RPC forwards an explicit retry count to the quota probe", async
       rpcHandler = handler;
     },
   });
+
   const cleanup = await plugin.setup(context);
+
   try {
     await rpcHandler?.({ retryCount: 2 });
     assert.deepEqual(probes, [

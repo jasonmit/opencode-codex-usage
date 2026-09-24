@@ -18,9 +18,11 @@ export const resolveAuthPath = ({
 
   if (platform === "win32") {
     const localAppData = env.LOCALAPPDATA ?? path.join(homeDir, "AppData", "Local");
+
     return path.join(localAppData, "opencode", "auth.json");
   }
 
   const xdgDataHome = env.XDG_DATA_HOME ?? path.join(homeDir, ".local", "share");
+
   return path.join(xdgDataHome, "opencode", "auth.json");
 };

@@ -9,13 +9,16 @@ import { createOpenCode2TuiPlugin } from "#root/opencode2-tui.js";
 import { test } from "./test.ts";
 
 type Route = ReturnType<Plugin.Context["ui"]["router"]["current"]>;
+
 type Listener = Parameters<Plugin.Context["data"]["listen"]>[0];
+
 type RpcResult = {
   status: string;
   statusCode?: number;
   error?: string;
   used?: { primary: number | string; secondary: number };
 };
+
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 const setup = async (eligible: (sessionID: string) => Promise<boolean> = async () => false) => {
@@ -31,12 +34,14 @@ const setup = async (eligible: (sessionID: string) => Promise<boolean> = async (
   const timers = new Map<number, { callback: () => void; delay: number }>();
   const toasts: Array<{ message: string; variant?: string }> = [];
   const locations: Array<{ directory: string } | undefined> = [];
+
   const plugin = createOpenCode2TuiPlugin(undefined, (options) =>
     createQuotaMonitor({
       ...options,
       setInterval: (callback, delay) => {
         const id = ++timerID;
         timers.set(id, { callback, delay });
+
         return id;
       },
       clearInterval: (id) => {
@@ -45,11 +50,13 @@ const setup = async (eligible: (sessionID: string) => Promise<boolean> = async (
       readSignalRevision: () => 0,
     }),
   );
+
   const host = {
     client: {
       rpc: () => ({
         usage: async () => {
           probes++;
+
           return result;
         },
         pollingEligible: async (
@@ -57,6 +64,7 @@ const setup = async (eligible: (sessionID: string) => Promise<boolean> = async (
           options?: { location?: { directory: string } },
         ) => {
           locations.push(options?.location);
+
           return eligible(input.sessionID);
         },
       }),
@@ -65,6 +73,7 @@ const setup = async (eligible: (sessionID: string) => Promise<boolean> = async (
       session: { get: () => ({ model: model(), location: { directory: "/project" } }) },
       listen: (callback: Listener) => {
         listener = callback;
+
         return () => {
           listener = undefined;
         };
@@ -74,6 +83,7 @@ const setup = async (eligible: (sessionID: string) => Promise<boolean> = async (
       router: { current: route },
       slot: (input: typeof claim) => {
         claim = input;
+
         return () => unmount();
       },
       toast: {
@@ -88,9 +98,11 @@ const setup = async (eligible: (sessionID: string) => Promise<boolean> = async (
       },
     },
   };
+
   // SAFETY: setup, the app slot, and the command only access the APIs supplied by this host fake.
   const context = host as typeof host & Plugin.Context;
   const cleanup = await plugin.setup(context);
+
   if (!claim || claim.append !== "app") assert.fail("expected app slot");
   const appClaim = claim;
   createRoot((dispose) => {
@@ -98,6 +110,7 @@ const setup = async (eligible: (sessionID: string) => Promise<boolean> = async (
     appClaim.render({});
   });
   await settle();
+
   return {
     setRoute,
     setModel,
@@ -127,6 +140,7 @@ test("OpenCode 2 local TUI wrapper exposes the required tui.js entrypoint", asyn
 
 test("OpenCode 2 pauses automatic probes outside eligible sessions but keeps the manual command", async () => {
   const state = await setup(async (id) => id === "ses_codex");
+
   try {
     assert.equal(state.probes(), 0, "home must not trigger a startup probe");
     assert.equal(state.timers.size, 0);
@@ -152,6 +166,7 @@ test("OpenCode 2 pauses automatic probes outside eligible sessions but keeps the
     assert.equal(state.probes(), 3);
     assert.equal(state.timers.size, 2);
     assert.deepEqual(state.locations, [{ directory: "/project" }, { directory: "/project" }]);
+
     for (const timer of state.timers.values()) timer.callback();
     await settle();
     assert.equal(state.probes(), 4);
@@ -175,6 +190,7 @@ test("OpenCode 2 pauses automatic probes outside eligible sessions but keeps the
 test("OpenCode 2 rechecks polling on selected-model and authentication changes", async () => {
   let allowed = true;
   const state = await setup(async () => allowed);
+
   try {
     state.setRoute({ type: "session", sessionID: "ses_current" });
     await settle();
@@ -211,11 +227,13 @@ test("OpenCode 2 records automatic probes and poll timer changes when diagnostic
   const previous = process.env.OPENCODE_CODEX_QUOTA_DEBUG_FILE;
   process.env.OPENCODE_CODEX_QUOTA_DEBUG_FILE = file;
   let state: Awaited<ReturnType<typeof setup>> | undefined;
+
   const events = async () =>
     (await readFile(file, "utf8"))
       .trim()
       .split("\n")
       .map((line) => line.slice(line.indexOf(" ") + 1));
+
   try {
     state = await setup(async () => true);
     state.setRoute({ type: "session", sessionID: "ses_codex" });
@@ -238,6 +256,7 @@ test("OpenCode 2 records automatic probes and poll timer changes when diagnostic
     ]);
   } finally {
     await state?.cleanup();
+
     if (previous === undefined) delete process.env.OPENCODE_CODEX_QUOTA_DEBUG_FILE;
     else process.env.OPENCODE_CODEX_QUOTA_DEBUG_FILE = previous;
     await rm(directory, { recursive: true, force: true });
@@ -246,6 +265,7 @@ test("OpenCode 2 records automatic probes and poll timer changes when diagnostic
 
 test("OpenCode 2 unchanged eligibility preserves timers without another startup probe", async () => {
   const state = await setup(async () => true);
+
   try {
     state.setRoute({ type: "session", sessionID: "ses_codex" });
     await settle();
@@ -257,6 +277,7 @@ test("OpenCode 2 unchanged eligibility preserves timers without another startup 
     await settle();
     assert.equal(state.probes(), 1);
     assert.deepEqual([...state.timers.keys()], timers);
+
     for (const timer of state.timers.values()) timer.callback();
     await settle();
     assert.equal(state.probes(), 2);
@@ -268,6 +289,7 @@ test("OpenCode 2 unchanged eligibility preserves timers without another startup 
 test("OpenCode 2 manual results survive pausing automatic polling", async () => {
   const state = await setup(async () => true);
   let resolve: (value: { status: string }) => void = () => assert.fail("request not prepared");
+
   try {
     state.setRoute({ type: "session", sessionID: "ses_codex" });
     await settle();
@@ -293,6 +315,7 @@ test("OpenCode 2 manual results survive pausing automatic polling", async () => 
 test("OpenCode 2 plugin disposal still suppresses pending manual results", async () => {
   const state = await setup();
   let resolve: (value: { status: string }) => void = () => assert.fail("request not prepared");
+
   try {
     state.setResult(
       new Promise<{ status: string }>((done) => {
@@ -313,12 +336,14 @@ test("OpenCode 2 plugin disposal still suppresses pending manual results", async
 
 test("OpenCode 2 ignores late eligibility responses after navigation or disposal", async () => {
   let resolve: (allowed: boolean) => void = () => assert.fail("eligibility not requested");
+
   const state = await setup(
     () =>
       new Promise<boolean>((done) => {
         resolve = done;
       }),
   );
+
   try {
     state.setRoute({ type: "session", sessionID: "ses_codex" });
     await settle();
@@ -343,10 +368,13 @@ test("OpenCode 2 eligibility failures pause polling and manual probes still work
   const errors: string[] = [];
   t.mock.method(console, "error", (message: string) => errors.push(message));
   let fail = false;
+
   const state = await setup(async () => {
     if (fail) throw new Error("eligibility unavailable");
+
     return true;
   });
+
   try {
     state.setRoute({ type: "session", sessionID: "ses_codex" });
     await settle();
@@ -368,6 +396,7 @@ test("OpenCode 2 validates RPC quota snapshots and reports manual failures while
   const errors: string[] = [];
   t.mock.method(console, "error", (message: string) => errors.push(message));
   const state = await setup();
+
   try {
     state.setResult({ status: "error", statusCode: 401, error: "token expired" });
     await state.command()?.run();

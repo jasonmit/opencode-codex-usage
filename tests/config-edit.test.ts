@@ -4,6 +4,7 @@ import { addPluginEntry, removePluginEntries } from "#lib/config-edit.js";
 import { test } from "./test.ts";
 
 const configPath = "opencode.jsonc";
+
 const pluginPath = "/plugins/codex";
 
 test("config edits ignore commented plugin examples and retain comments", () => {
@@ -14,6 +15,7 @@ test("config edits ignore commented plugin examples and retain comments", () => 
     // /plugins/codex
   ]
 }\n`;
+
   const installed = addPluginEntry(content, configPath, pluginPath, "plugins");
   assert.deepEqual(parse(installed), { plugins: ["existing", pluginPath] });
   const uninstalled = removePluginEntries(installed, configPath, pluginPath, "plugins");
@@ -28,6 +30,7 @@ test("config edits add only a root plugins property", () => {
   "example": "\\"plugins\\": []",
   "nested": { "plugins": ["nested-entry"] }
 }\n`;
+
   const installed = addPluginEntry(content, configPath, pluginPath, "plugins");
   assert.deepEqual(parse(installed), {
     example: '"plugins": []',
@@ -43,6 +46,7 @@ test("config edits recognize string, tuple, and object entries without duplicati
     [pluginPath, { enabled: true }],
     { package: pluginPath, options: {} },
   ];
+
   for (const property of ["plugin", "plugins"] as const) {
     for (const entry of entries) {
       const content = JSON.stringify({ [property]: ["other", entry] });
@@ -56,9 +60,11 @@ test("config edits recognize string, tuple, and object entries without duplicati
 
 test("config edits remove every match and preserve unrelated plugin options", () => {
   const other = { package: "other", options: { enabled: true } };
+
   const content = JSON.stringify({
     plugins: [pluginPath, other, [pluginPath, {}], { package: pluginPath }],
   });
+
   assert.deepEqual(parse(removePluginEntries(content, configPath, pluginPath, "plugins")), {
     plugins: [other],
   });
@@ -89,6 +95,7 @@ test("config edits reject invalid JSONC, non-object roots, and non-array plugins
     { content: "[]", error: /root must be an object/ },
     { content: '{"plugins": {"not": "an array"}}', error: /must be an array/ },
   ];
+
   for (const { content, error } of cases) {
     assert.throws(() => addPluginEntry(content, configPath, pluginPath, "plugins"), error);
     assert.throws(() => removePluginEntries(content, configPath, pluginPath, "plugins"), error);

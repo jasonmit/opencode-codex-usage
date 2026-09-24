@@ -8,13 +8,16 @@ import { statusState } from "./quota-format.js";
 
 export const runCli = async (argv: string[] = process.argv.slice(2)): Promise<void> => {
   const options = parseCliOptions(argv);
+
   if (options.help) {
     process.stdout.write(`${helpText()}\n`);
+
     return;
   }
 
   if (options.install || options.uninstall) {
     await configurePlugins(options);
+
     return;
   }
 
@@ -22,8 +25,10 @@ export const runCli = async (argv: string[] = process.argv.slice(2)): Promise<vo
     options.opencodeVersion === 2
       ? await probeOpenCode2Quota(options.retryCount)
       : await probeQuota({ retryCount: options.retryCount });
+
   const state = statusState(snapshot.status);
   const hasError = state === "error";
+
   const line = formatProbeOutput(snapshot, {
     pretty: options.pretty,
     printJson: options.printJson,
@@ -37,6 +42,7 @@ export const runCli = async (argv: string[] = process.argv.slice(2)): Promise<vo
   }
 
   const shouldNotify = !options.noNotify;
+
   if (!shouldNotify) return;
 
   const signalPath = resolveSignalPath();
@@ -49,10 +55,12 @@ export const runCliSafely = async (argv: string[] = process.argv.slice(2)): Prom
     await runCli(argv);
   } catch (error: unknown) {
     const detail = error instanceof Error ? error.message : String(error);
+
     const line = formatProbeOutput(
       { status: "error", statusCode: "local", error: detail },
       { pretty: wantsPrettyOutput(argv), printJson: wantsJsonOutput(argv) },
     );
+
     process.stderr.write(`${line}\n`);
     process.exitCode = 1;
   }

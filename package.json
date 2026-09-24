@@ -68,6 +68,7 @@
     "pack": "npm pack"
   },
   "devDependencies": {
+    "@oxlint/plugins": "1.79.0",
     "@types/node": "^26.2.0",
     "oxlint": "^1.79.0",
     "oxlint-tsgolint": "^7.0.2001",

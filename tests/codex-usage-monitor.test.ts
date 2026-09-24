@@ -6,9 +6,11 @@ import { test } from "./test.ts";
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
+
   const promise = new Promise<T>((done) => {
     resolve = done;
   });
+
   return { promise, resolve };
 };
 
@@ -20,6 +22,7 @@ const setup = (snapshots: ProbeSnapshot[] = []) => {
   let nextTimer = 1;
   let revision = 0;
   let probes = 0;
+
   const monitor = createQuotaMonitor({
     probe: async () => snapshots[probes++] ?? { status: "ok" },
     notify: (toast) => {
@@ -37,6 +40,7 @@ const setup = (snapshots: ProbeSnapshot[] = []) => {
     setInterval: (callback) => {
       const id = nextTimer++;
       timers.set(id, callback);
+
       return id;
     },
     clearInterval: (id) => {
@@ -44,6 +48,7 @@ const setup = (snapshots: ProbeSnapshot[] = []) => {
       timers.delete(id);
     },
   });
+
   return {
     monitor,
     timers,
@@ -80,6 +85,7 @@ test("monitor only notifies worsening background threshold transitions", async (
     { status: "warn" },
     { status: "critical" },
   ]);
+
   await state.monitor.refresh();
   await state.monitor.refresh();
   await state.monitor.refresh();
@@ -115,6 +121,7 @@ test("requested auth failures retain their original detail", async () => {
       error: "missing access token",
     },
   ]);
+
   await state.monitor.refresh({ force: true, showFailure: true });
   assert.equal(state.toasts[0]?.variant, "error");
   assert.match(state.toasts[0]?.message ?? "", /missing access token/);
@@ -124,9 +131,11 @@ test("forced refresh arriving during a probe runs once afterward", async () => {
   const first = deferred<{ status: string }>();
   let probes = 0;
   const toasts: ToastBody[] = [];
+
   const monitor = createQuotaMonitor({
     probe: () => {
       probes++;
+
       return probes === 1 ? first.promise : Promise.resolve({ status: "ok" });
     },
     notify: (toast) => {
@@ -138,6 +147,7 @@ test("forced refresh arriving during a probe runs once afterward", async () => {
     durationMs: 5000,
     signalPath: "/tmp/codex.signal",
   });
+
   const running = monitor.refresh();
   const queued = monitor.refresh({ force: true });
   void monitor.refresh({ force: true });
@@ -151,9 +161,11 @@ test("stop invalidates in-flight probes and queued refreshes", async () => {
   const first = deferred<{ status: string }>();
   let probes = 0;
   const toasts: ToastBody[] = [];
+
   const monitor = createQuotaMonitor({
     probe: () => {
       probes++;
+
       return first.promise;
     },
     notify: (toast) => {
@@ -165,6 +177,7 @@ test("stop invalidates in-flight probes and queued refreshes", async () => {
     durationMs: 5000,
     signalPath: "/tmp/codex.signal",
   });
+
   const running = monitor.refresh({ force: true });
   void monitor.refresh({ force: true });
   monitor.stop();
@@ -177,9 +190,11 @@ test("stop invalidates in-flight probes and queued refreshes", async () => {
 test("restart during an in-flight probe queues a fresh startup probe", async () => {
   const first = deferred<{ status: string }>();
   let probes = 0;
+
   const monitor = createQuotaMonitor({
     probe: () => {
       probes++;
+
       return probes === 1 ? first.promise : Promise.resolve({ status: "ok" });
     },
     notify: () => undefined,
@@ -189,6 +204,7 @@ test("restart during an in-flight probe queues a fresh startup probe", async () 
     durationMs: 5000,
     signalPath: "/tmp/codex.signal",
   });
+
   monitor.start();
   monitor.stop({ resetStatus: false });
   monitor.start();

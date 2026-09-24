@@ -5,13 +5,17 @@ import path from "node:path";
 import { z } from "zod";
 
 export const root = path.resolve(import.meta.dirname, "../../..");
+
 const cli = path.resolve(import.meta.dirname, "../../bin/opencode-codex-usage.js");
+
 export const serverPlugin = path.join(root, "opencode2-plugin");
+
 export const tuiPlugin = path.join(root, "opencode2-tui-plugin");
 
 export const fixture = async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "codex-cli-integration-"));
   const configHome = path.join(directory, "config");
+
   const env = {
     ...process.env,
     HOME: directory,
@@ -21,12 +25,14 @@ export const fixture = async () => {
     OPENCODE_AUTH_PATH: "",
     OPENCODE_CODEX_USAGE_SIGNAL_PATH: path.join(directory, "quota.signal"),
   };
+
   const run = (args: string[], environment = env) =>
     spawnSync(process.execPath, ["--conditions=opencode-codex-usage-test", cli, ...args], {
       env: environment,
       encoding: "utf8",
       cwd: directory,
     });
+
   return {
     directory,
     configHome,
@@ -54,6 +60,7 @@ process.exitCode = ${exitCode};
 `,
     { mode: 0o755 },
   );
+
   return {
     env: { ...state.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` },
     calls: async () => z.array(z.string()).parse(JSON.parse(await readFile(calls, "utf8"))),

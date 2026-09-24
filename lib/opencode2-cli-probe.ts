@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ProbeSnapshotSchema, type ProbeSnapshot } from "./codex-usage-probe.js";
 
 const execute = promisify(execFile);
+
 const responseSchema = z.object({ output: ProbeSnapshotSchema });
 
 export const probeOpenCode2Quota = async (retryCount?: number): Promise<ProbeSnapshot> => {
@@ -19,8 +20,10 @@ export const probeOpenCode2Quota = async (retryCount?: number): Promise<ProbeSna
     ],
     { encoding: "utf8", timeout: 180_000 },
   );
+
   try {
     const response: unknown = JSON.parse(stdout);
+
     return responseSchema.parse(response).output;
   } catch (error) {
     throw new Error("Invalid quota response from OpenCode 2", { cause: error });

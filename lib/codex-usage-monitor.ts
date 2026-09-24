@@ -101,11 +101,15 @@ export const createQuotaMonitor = (options: QuotaMonitorOptions): QuotaMonitor =
     try {
       record("automatic-probe-started");
       const snapshot = await options.probe();
+
       if (runGeneration !== generation) return;
       const detail = snapshot.error?.trim();
+
       if (detail) {
         await logFailure(detail);
+
         if (showFailure) await notify(failureToast(detail, options.durationMs));
+
         return;
       }
 
@@ -113,12 +117,15 @@ export const createQuotaMonitor = (options: QuotaMonitorOptions): QuotaMonitor =
         force ||
         (shouldToastForBackground(snapshot.status, options.threshold) &&
           shouldToastForBackgroundTransition(snapshot.status, previousStatus));
+
       previousStatus = snapshot.status;
+
       if (shouldNotify) await notify(toastBodyFromParsed(snapshot, options.durationMs));
     } catch (error: unknown) {
       if (runGeneration !== generation) return;
       const detail = error instanceof Error ? error.message : String(error);
       await logFailure(detail);
+
       if (showFailure) await notify(failureToast(detail, options.durationMs));
     }
   };
@@ -128,11 +135,13 @@ export const createQuotaMonitor = (options: QuotaMonitorOptions): QuotaMonitor =
       pendingRefresh = true;
       pendingForce ||= request.force ?? false;
       pendingShowFailure ||= request.showFailure ?? false;
+
       return running;
     }
 
     running = (async () => {
       let current = request;
+
       do {
         pendingRefresh = false;
         pendingForce = false;
@@ -143,6 +152,7 @@ export const createQuotaMonitor = (options: QuotaMonitorOptions): QuotaMonitor =
     })().finally(() => {
       running = undefined;
     });
+
     return running;
   };
 
@@ -160,6 +170,7 @@ export const createQuotaMonitor = (options: QuotaMonitorOptions): QuotaMonitor =
       pollTimer = schedule(() => refreshSafely(), options.pollMs);
       signalTimer = schedule(() => {
         const revision = signalRevision(options.signalPath);
+
         if (revision <= lastSignalRevision) return;
         lastSignalRevision = revision;
         refreshSafely({ force: true });
@@ -173,11 +184,15 @@ export const createQuotaMonitor = (options: QuotaMonitorOptions): QuotaMonitor =
       pendingRefresh = false;
       pendingForce = false;
       pendingShowFailure = false;
+
       if (pollTimer !== undefined) unschedule(pollTimer);
+
       if (signalTimer !== undefined) unschedule(signalTimer);
       pollTimer = undefined;
       signalTimer = undefined;
+
       if (wasPolling) record("poll-timer-stopped");
+
       if (resetStatus) previousStatus = undefined;
     },
     refresh,
