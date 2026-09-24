@@ -7,14 +7,10 @@ import type { CliOptions } from "./cli-options.js";
 import { addPluginEntry, parseConfig, removePluginEntries } from "./config-edit.js";
 import { lstatIfExists } from "./file-status.js";
 
-export const resolvePluginInstallPath = (moduleDir: string): string => {
-  return path.resolve(moduleDir, "..", "..");
-};
-
 const globalConfigDirectory = (): string =>
   path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "opencode");
 
-export const resolveTuiConfigPath = (configPath: string, opencodeVersion: 1 | 2 = 1): string => {
+const resolveTuiConfigPath = (configPath: string, opencodeVersion: 1 | 2): string => {
   return opencodeVersion === 2
     ? path.join(globalConfigDirectory(), "cli.json")
     : path.join(path.dirname(configPath), "tui.json");
@@ -22,7 +18,7 @@ export const resolveTuiConfigPath = (configPath: string, opencodeVersion: 1 | 2 
 
 const pluginPathFromModule = (): string => {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-  return resolvePluginInstallPath(moduleDir);
+  return path.resolve(moduleDir, "..", "..");
 };
 
 type ConfigUpdate = {
