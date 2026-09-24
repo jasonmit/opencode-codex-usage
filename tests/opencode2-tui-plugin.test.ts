@@ -10,6 +10,12 @@ import { test } from "./test.ts";
 
 type Route = ReturnType<Plugin.Context["ui"]["router"]["current"]>;
 type Listener = Parameters<Plugin.Context["data"]["listen"]>[0];
+type RpcResult = {
+  status: string;
+  statusCode?: number;
+  error?: string;
+  used?: { primary: number | string; secondary: number };
+};
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 const setup = async (eligible: (sessionID: string) => Promise<boolean> = async () => false) => {
@@ -20,7 +26,7 @@ const setup = async (eligible: (sessionID: string) => Promise<boolean> = async (
   let listener: Listener | undefined;
   let unmount: () => void = () => undefined;
   let probes = 0;
-  let result: unknown = { status: "ok" };
+  let result: RpcResult | Promise<RpcResult> = { status: "ok" };
   let timerID = 0;
   const timers = new Map<number, { callback: () => void; delay: number }>();
   const toasts: Array<{ message: string; variant?: string }> = [];
@@ -101,7 +107,7 @@ const setup = async (eligible: (sessionID: string) => Promise<boolean> = async (
     unmount,
     probes: () => probes,
     command: () => layer?.().commands?.[0],
-    setResult: (value: unknown) => {
+    setResult: (value: RpcResult | Promise<RpcResult>) => {
       result = value;
     },
     changed: () =>

@@ -13,8 +13,8 @@ const deferred = <T>() => {
 };
 
 const setup = (snapshots: ProbeSnapshot[] = []) => {
-  const timers = new Map<number, () => void>();
-  const cleared: number[] = [];
+  const timers = new Map<number | ReturnType<typeof setInterval>, () => void>();
+  const cleared: Array<number | ReturnType<typeof setInterval>> = [];
   const toasts: ToastBody[] = [];
   const errors: string[] = [];
   let nextTimer = 1;
@@ -40,8 +40,8 @@ const setup = (snapshots: ProbeSnapshot[] = []) => {
       return id;
     },
     clearInterval: (id) => {
-      cleared.push(id as number);
-      timers.delete(id as number);
+      cleared.push(id);
+      timers.delete(id);
     },
   });
   return {

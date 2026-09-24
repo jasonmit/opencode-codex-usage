@@ -6,12 +6,17 @@ import { test } from "./test.ts";
 type ToolEditor = Parameters<Parameters<Plugin.Context["tool"]["transform"]>[0]>[0];
 type RegisteredTool = Parameters<ToolEditor["add"]>[0];
 
+const executeTool = (tool: RegisteredTool | undefined) => {
+  // SAFETY: this tool's execute handler does not read the context; the test exercises its result.
+  return tool?.execute({}, {} as never);
+};
+
 const makeContext = (options?: {
   onTool?: (tool: RegisteredTool) => void;
   onSubscribe?: () => void;
   onToolDispose?: () => void;
   activeConnection?: () => Promise<unknown>;
-  resolveConnection?: (connection: unknown) => Promise<unknown>;
+  resolveConnection?: (connection: { id: string }) => Promise<unknown>;
   onRpcHandler?: (handler: (input: { retryCount?: number }) => Promise<unknown>) => void;
   onRpcDispose?: () => void;
   onPollingHandler?: (handler: (input: { sessionID: string }) => Promise<boolean>) => void;
@@ -34,7 +39,14 @@ const makeContext = (options?: {
     tool: {
       transform: async (transform: (editor: ToolEditor) => void) => {
         if (options?.toolTransformError) throw options.toolTransformError;
-        transform({ add: options?.onTool ?? (() => undefined) } as ToolEditor);
+        transform({
+          list: () => [],
+          get: () => undefined,
+          namespace: () => undefined,
+          add: options?.onTool ?? (() => undefined),
+          update: () => undefined,
+          remove: () => undefined,
+        });
         return {
           dispose: async () => options?.onToolDispose?.(),
         };
@@ -108,7 +120,7 @@ test("OpenCode 2 plugin registers the official codex_usage tool result", async (
     required: [],
     additionalProperties: false,
   });
-  assert.deepEqual(await registeredTool?.execute({}, {} as never), {
+  assert.deepEqual(await executeTool(registeredTool), {
     content: '{"status":"ok"}',
   });
 
@@ -235,18 +247,18 @@ test("OpenCode 2 tool follows the active OAuth credential on every call", async 
     activeConnection: async () => ({ id: activeID }),
     resolveConnection: async (connection) => ({
       type: "oauth",
-      access: `token-${(connection as { id: string }).id}`,
+      access: `token-${connection.id}`,
       refresh: "unused",
       expires: Date.now() + 60_000,
       methodID: "chatgpt-browser",
-      metadata: { accountID: `account-${(connection as { id: string }).id}` },
+      metadata: { accountID: `account-${connection.id}` },
     }),
   });
 
   const cleanup = await plugin.setup(context);
-  await registeredTool?.execute({}, {} as never);
+  await executeTool(registeredTool);
   activeID = "second";
-  await registeredTool?.execute({}, {} as never);
+  await executeTool(registeredTool);
 
   assert.deepEqual(probes, [
     { credentials: { accessToken: "token-first", accountId: "account-first" } },
@@ -269,7 +281,7 @@ test("OpenCode 2 never falls back to legacy credentials without active OAuth", a
   });
 
   const cleanup = await plugin.setup(context);
-  const result = await registeredTool?.execute({}, {} as never);
+  const result = await executeTool(registeredTool);
 
   assert.equal(probes, 0);
   const content = result?.content;

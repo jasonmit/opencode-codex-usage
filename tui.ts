@@ -42,7 +42,16 @@ const debugEnabled = (): boolean => {
   return value === "1" || value === "true" || value === "yes";
 };
 
-const debugLog = (message: string, extra: Record<string, unknown> = {}): void => {
+const debugLog = (
+  message: string,
+  extra: {
+    hasCommandRegister?: string;
+    hasToast?: string;
+    detail?: string;
+    value?: string;
+    slashName?: string;
+  } = {},
+): void => {
   if (!debugEnabled()) return;
   const line = JSON.stringify({ time: new Date().toISOString(), message, ...extra });
   void appendFile(debugLogPath, `${line}\n`, "utf8").catch(() => undefined);

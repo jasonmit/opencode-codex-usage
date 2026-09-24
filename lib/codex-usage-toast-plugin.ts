@@ -10,6 +10,16 @@ const SIGNAL_WATCH_MS = 1500;
 const PropertyRecordSchema = z.record(z.string(), z.unknown());
 const NonEmptyStringSchema = z.string().trim().min(1);
 
+type EventProperties = {
+  model?: unknown;
+  modelName?: unknown;
+  modelID?: unknown;
+  info?: unknown;
+  session?: unknown;
+  file?: unknown;
+  path?: unknown;
+};
+
 const stringFromUnknown = (value: unknown): string | undefined => {
   const parsed = z.string().safeParse(value);
   return parsed.success ? parsed.data : undefined;
@@ -21,7 +31,7 @@ const nonEmptyStringFromUnknown = (value: unknown): string | undefined => {
 };
 
 export const resolveModelFromEventProperties = (
-  properties: Record<string, unknown> | undefined,
+  properties: EventProperties | undefined,
 ): string | undefined => {
   if (!properties) return undefined;
 
@@ -67,7 +77,7 @@ type Client = {
         service: string;
         level: "debug" | "info" | "warn" | "error";
         message: string;
-        extra?: Record<string, unknown>;
+        extra?: { detail: string | undefined; worktree: string };
       };
     }) => Promise<void>;
   };
@@ -75,7 +85,7 @@ type Client = {
 
 type PluginEvent = {
   type: string;
-  properties?: Record<string, unknown>;
+  properties?: EventProperties;
 };
 
 type PluginContext = {
