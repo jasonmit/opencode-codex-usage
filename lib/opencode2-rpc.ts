@@ -17,6 +17,10 @@ export const CODEX_USAGE_RPC = Rpc.define({
       input: UsageRequestSchema,
       output: ProbeSnapshotSchema,
     },
+    pollingEligible: {
+      input: z.object({ sessionID: z.string().min(1) }).strict(),
+      output: z.boolean(),
+    },
   },
   events: {},
 });

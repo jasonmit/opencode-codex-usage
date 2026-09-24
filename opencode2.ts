@@ -50,6 +50,13 @@ export const createOpenCode2Plugin = (probe: QuotaProbe = probeQuota) =>
       try {
         const rpcRegistration = await ctx.rpc.register(CODEX_USAGE_RPC, {
           usage: readQuota,
+          pollingEligible: async ({ sessionID }) => {
+            const session = await ctx.session.get({ sessionID });
+            const model =
+              session.model ?? (await ctx.model.default({ location: session.location })).data;
+            if (model?.providerID !== "openai") return false;
+            return (await activeCredentials(ctx)) !== undefined;
+          },
         });
         disposers.push(() => rpcRegistration.dispose());
         const toolRegistration = await ctx.tool.transform((editor) =>

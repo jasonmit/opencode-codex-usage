@@ -31,7 +31,9 @@ The assistant uses the `codex_usage` tool. Results cover Codex quota, not ChatGP
 
 No assistant turn needed.
 
-**Automatic alerts:** checks run on startup and every 10 minutes. By default, toasts appear when quota status worsens to warning or higher.
+**Automatic alerts (OpenCode 2):** checks run when you enter a session using OpenAI with a ChatGPT OAuth connection, then every 10 minutes while that session stays selected. Switching to another provider, API-key authentication, or the home screen pauses polling. Sessions without an explicit model selection use OpenCode's project default. `/codex-usage` still works while polling is paused.
+
+By default, toasts appear when quota status worsens to warning or higher. OpenCode 1 behavior is unchanged.
 
 ## From the terminal
 

@@ -14,9 +14,23 @@ const makeContext = (options?: {
   resolveConnection?: (connection: unknown) => Promise<unknown>;
   onRpcHandler?: (handler: (input: { retryCount?: number }) => Promise<unknown>) => void;
   onRpcDispose?: () => void;
+  onPollingHandler?: (handler: (input: { sessionID: string }) => Promise<boolean>) => void;
+  sessionModel?: { id: string; providerID: string };
+  defaultModel?: { id: string; providerID: string } | null;
+  onDefaultLocation?: (location: { directory: string }) => void;
   toolTransformError?: Error;
 }) => {
-  const context = {
+  const host = {
+    location: { directory: "/project" },
+    session: {
+      get: async () => ({ model: options?.sessionModel, location: { directory: "/project" } }),
+    },
+    model: {
+      default: async (input: { location: { directory: string } }) => {
+        options?.onDefaultLocation?.(input.location);
+        return { location: input.location, data: options?.defaultModel ?? null };
+      },
+    },
     tool: {
       transform: async (transform: (editor: ToolEditor) => void) => {
         if (options?.toolTransformError) throw options.toolTransformError;
@@ -45,16 +59,22 @@ const makeContext = (options?: {
     rpc: {
       register: async (
         _definition: unknown,
-        handlers: { usage: (input: { retryCount?: number }) => Promise<unknown> },
+        handlers: {
+          usage: (input: { retryCount?: number }) => Promise<unknown>;
+          pollingEligible?: (input: { sessionID: string }) => Promise<boolean>;
+        },
       ) => {
         options?.onRpcHandler?.(handlers.usage);
+        if (handlers.pollingEligible) options?.onPollingHandler?.(handlers.pollingEligible);
         return {
           dispose: async () => options?.onRpcDispose?.(),
           events: { emit: async () => undefined },
         };
       },
     },
-  } as unknown as Plugin.Context;
+  };
+  // SAFETY: setup and its registered handlers only access the domains implemented by this host fake.
+  const context = host as typeof host & Plugin.Context;
 
   return { context };
 };
@@ -94,6 +114,91 @@ test("OpenCode 2 plugin registers the official codex_usage tool result", async (
 
   await cleanup?.();
   assert.equal(toolDisposed, true);
+});
+
+test("OpenCode 2 polling eligibility uses the session model before the location default", async () => {
+  for (const [providerID, eligible] of [
+    ["openai", true],
+    ["anthropic", false],
+  ] as const) {
+    let handler: ((input: { sessionID: string }) => Promise<boolean>) | undefined;
+    let probes = 0;
+    const plugin = createOpenCode2Plugin(async () => {
+      probes++;
+      return { status: "ok" };
+    });
+    const { context } = makeContext({
+      sessionModel: { providerID, id: "model-without-codex-in-its-name" },
+      defaultModel: { providerID: providerID === "openai" ? "anthropic" : "openai", id: "default" },
+      onDefaultLocation: () => assert.fail("explicit selection must bypass the default"),
+      activeConnection: async () => ({ type: "credential", id: "active", label: "ChatGPT" }),
+      resolveConnection: async () => ({ type: "oauth", access: "token", metadata: {} }),
+      onPollingHandler: (value) => {
+        handler = value;
+      },
+    });
+    const cleanup = await plugin.setup(context);
+    try {
+      assert.ok(handler, "expected polling eligibility RPC");
+      assert.equal(await handler({ sessionID: "ses_current" }), eligible);
+      assert.equal(probes, 0, "eligibility must not probe quota");
+    } finally {
+      await cleanup?.();
+    }
+  }
+});
+
+test("OpenCode 2 polling eligibility resolves inherited defaults at the session location", async () => {
+  for (const providerID of ["openai", "opencode", undefined]) {
+    let handler: ((input: { sessionID: string }) => Promise<boolean>) | undefined;
+    const locations: Array<{ directory: string }> = [];
+    const { context } = makeContext({
+      defaultModel: providerID ? { providerID, id: "default" } : null,
+      onDefaultLocation: (location) => locations.push(location),
+      activeConnection: async () => ({ type: "credential", id: "active", label: "ChatGPT" }),
+      resolveConnection: async () => ({ type: "oauth", access: "token", metadata: {} }),
+      onPollingHandler: (value) => {
+        handler = value;
+      },
+    });
+    const cleanup = await createOpenCode2Plugin().setup(context);
+    try {
+      assert.ok(handler, "expected polling eligibility RPC");
+      assert.equal(await handler({ sessionID: "ses_current" }), providerID === "openai");
+      assert.deepEqual(locations, [{ directory: "/project" }]);
+    } finally {
+      await cleanup?.();
+    }
+  }
+});
+
+test("OpenCode 2 polling eligibility requires the current OpenAI OAuth connection", async () => {
+  let handler: ((input: { sessionID: string }) => Promise<boolean>) | undefined;
+  let connected = false;
+  let oauth = false;
+  const { context } = makeContext({
+    sessionModel: { providerID: "openai", id: "gpt" },
+    activeConnection: async () =>
+      connected ? { type: "credential", id: "active", label: "OpenAI" } : undefined,
+    resolveConnection: async () =>
+      oauth ? { type: "oauth", access: "token" } : { type: "api", key: "key" },
+    onPollingHandler: (value) => {
+      handler = value;
+    },
+  });
+  const cleanup = await createOpenCode2Plugin().setup(context);
+  try {
+    assert.ok(handler, "expected polling eligibility RPC");
+    assert.equal(await handler({ sessionID: "ses_current" }), false);
+    connected = true;
+    assert.equal(await handler({ sessionID: "ses_current" }), false);
+    oauth = true;
+    assert.equal(await handler({ sessionID: "ses_current" }), true);
+    oauth = false;
+    assert.equal(await handler({ sessionID: "ses_current" }), false);
+  } finally {
+    await cleanup?.();
+  }
 });
 
 test("OpenCode 2 releases registrations once without subscribing to unused events", async () => {

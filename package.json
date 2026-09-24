@@ -59,7 +59,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "npm run clean && tsc -p tsconfig.json && chmod +x dist/bin/opencode-codex-usage.js",
-    "test": "rimraf .test-dist && tsc -p tests/tsconfig.json && node --conditions=opencode-codex-usage-test --test \".test-dist/tests/**/*.test.js\"",
+    "test": "rimraf .test-dist && tsc -p tests/tsconfig.json && node --conditions=browser --conditions=opencode-codex-usage-test --test \".test-dist/tests/**/*.test.js\"",
     "lint": "oxlint --type-aware --deny-warnings .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

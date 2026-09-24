@@ -22,6 +22,9 @@ export type QuotaMonitorOptions = {
   threshold: ToastThreshold;
   durationMs: number;
   signalPath: string;
+  onDiagnostic?: (
+    event: "poll-timer-started" | "poll-timer-stopped" | "automatic-probe-started",
+  ) => void;
   signalWatchMs?: number;
   readSignalRevision?: (path: string) => number;
   setInterval?: (callback: () => void, delay: number) => IntervalHandle;
@@ -64,6 +67,16 @@ export const createQuotaMonitor = (options: QuotaMonitorOptions): QuotaMonitor =
   let pendingShowFailure = false;
   let generation = 0;
 
+  const record = (
+    event: "poll-timer-started" | "poll-timer-stopped" | "automatic-probe-started",
+  ) => {
+    try {
+      options.onDiagnostic?.(event);
+    } catch {
+      // Diagnostics must not break polling.
+    }
+  };
+
   const logFailure = async (detail: string): Promise<void> => {
     try {
       await options.logError("quota probe failed", detail);
@@ -86,6 +99,7 @@ export const createQuotaMonitor = (options: QuotaMonitorOptions): QuotaMonitor =
     runGeneration: number,
   ): Promise<void> => {
     try {
+      record("automatic-probe-started");
       const snapshot = await options.probe();
       if (runGeneration !== generation) return;
       const detail = snapshot.error?.trim();
@@ -150,9 +164,11 @@ export const createQuotaMonitor = (options: QuotaMonitorOptions): QuotaMonitor =
         lastSignalRevision = revision;
         refreshSafely({ force: true });
       }, signalWatchMs);
+      record("poll-timer-started");
       refreshSafely({ force: options.threshold === "always" });
     },
     stop({ resetStatus = true } = {}) {
+      const wasPolling = pollTimer !== undefined;
       generation++;
       pendingRefresh = false;
       pendingForce = false;
@@ -161,6 +177,7 @@ export const createQuotaMonitor = (options: QuotaMonitorOptions): QuotaMonitor =
       if (signalTimer !== undefined) unschedule(signalTimer);
       pollTimer = undefined;
       signalTimer = undefined;
+      if (wasPolling) record("poll-timer-stopped");
       if (resetStatus) previousStatus = undefined;
     },
     refresh,
