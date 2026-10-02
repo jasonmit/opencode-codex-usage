@@ -160,6 +160,8 @@ export const parseCliOptions = (argv: string[]): CliOptions => {
       opencodeVersion = parseOpenCodeVersion(arg.slice("--opencode=".length));
       continue;
     }
+
+    throw new Error(`Unknown argument: ${arg}`);
   }
 
   if (install && uninstall) {

@@ -130,6 +130,25 @@ test("CLI reports argument errors using the requested output format", async (t) 
   assert.match(pretty.stderr, /codex quota probe:\s+ERROR/);
 });
 
+test("CLI rejects unknown arguments without contacting OpenCode or signaling a refresh", async (t) => {
+  const state = await fixture();
+  t.after(state.cleanup);
+  const host = await fakeOpenCode(state, '{"output":{"status":"ok"}}');
+
+  for (const argument of ["--uninstal", "-x", "--retryy=2", "usage"]) {
+    const result = state.run(["--json", argument], host.env);
+    assert.equal(result.status, 1, argument);
+    assert.deepEqual(JSON.parse(result.stderr), {
+      status: "error",
+      statusCode: "local",
+      error: `Unknown argument: ${argument}`,
+    });
+    assert.equal(result.stdout, "");
+    await assert.rejects(host.calls(), { code: "ENOENT" });
+    await assert.rejects(readFile(state.env.OPENCODE_CODEX_USAGE_SIGNAL_PATH), { code: "ENOENT" });
+  }
+});
+
 test("CLI signals a refresh by default and honors --no-notify", async (t) => {
   const state = await fixture();
   t.after(state.cleanup);
