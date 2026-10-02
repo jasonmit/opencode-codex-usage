@@ -3,6 +3,7 @@ import { createQuotaMonitor } from "#lib/codex-usage-monitor.js";
 import type { ToastBody } from "#lib/quota-toast.js";
 import { type ProbeSnapshot } from "#lib/codex-usage-probe.js";
 import { test } from "./test.ts";
+import type { ToastThreshold } from "#lib/quota-policy.js";
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
@@ -14,7 +15,7 @@ const deferred = <T>() => {
   return { promise, resolve };
 };
 
-const setup = (snapshots: ProbeSnapshot[] = []) => {
+const setup = (snapshots: ProbeSnapshot[] = [], threshold: ToastThreshold = "warn") => {
   const timers = new Map<number | ReturnType<typeof setInterval>, () => void>();
   const cleared: Array<number | ReturnType<typeof setInterval>> = [];
   const toasts: ToastBody[] = [];
@@ -32,7 +33,7 @@ const setup = (snapshots: ProbeSnapshot[] = []) => {
       errors.push(message);
     },
     pollMs: 100,
-    threshold: "warn",
+    threshold,
     durationMs: 5000,
     signalPath: "/tmp/codex.signal",
     signalWatchMs: 50,
@@ -102,6 +103,53 @@ test("timer restart can preserve background transition state", async () => {
   state.monitor.stop({ resetStatus: false });
   await state.monitor.refresh();
   assert.equal(state.toasts.length, 1);
+});
+
+test("background failures obey thresholds and notify again only after recovery", async () => {
+  for (const threshold of ["warn", "critical", "error", "always", "never"] as const) {
+    const state = setup(
+      [
+        { status: "warn" },
+        { status: "error", error: "offline" },
+        { status: "error", error: "still offline" },
+        { status: "ok" },
+        { status: "error", error: "offline again" },
+      ],
+      threshold,
+    );
+
+    for (let i = 0; i < 5; i++) await state.monitor.refresh();
+    const failures = state.toasts.filter((toast) => toast.message.includes("Quota error"));
+    assert.equal(failures.length, threshold === "never" ? 0 : 2, threshold);
+
+    if (threshold !== "never") {
+      assert.match(failures[0]?.message ?? "", /offline/);
+      assert.match(failures[1]?.message ?? "", /offline again/);
+    }
+  }
+});
+
+test("thrown background failures use the same transition policy as error snapshots", async () => {
+  const toasts: ToastBody[] = [];
+
+  const monitor = createQuotaMonitor({
+    probe: async () => {
+      throw new Error("transport offline");
+    },
+    notify: (toast) => {
+      toasts.push(toast);
+    },
+    logError: () => undefined,
+    pollMs: 100,
+    threshold: "error",
+    durationMs: 5000,
+    signalPath: "/tmp/codex.signal",
+  });
+
+  await monitor.refresh();
+  await monitor.refresh();
+  assert.equal(toasts.length, 1);
+  assert.match(toasts[0]?.message ?? "", /transport offline/);
 });
 
 test("forced refresh bypasses threshold and reports requested failures", async () => {

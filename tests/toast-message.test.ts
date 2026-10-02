@@ -68,52 +68,11 @@ test("falls back to compact placeholders for missing metric values", () => {
   );
 });
 
-test("falls back to placeholders for non-scalar metric values", () => {
-  const malformed = {
-    status: "ok",
-    used: { primary: { unexpected: true }, secondary: ["unexpected"] },
-    reset: { primary: "1h0m", secondary: "2h0m" },
-  };
-
-  const message = messageFromParsed(malformed);
-
-  assert.equal(
-    message,
-    "A limit  ········   - left · resets 1h0m\nB limit  ········   - left · resets 2h0m",
-  );
-});
-
-test("falls back to placeholders for malformed percentage strings", () => {
-  const message = messageFromParsed({
-    status: "ok",
-    used: { primary: "81oops", secondary: "9%%" },
-    reset: { primary: "1h0m", secondary: "2h0m" },
-  });
-
-  assert.equal(
-    message,
-    "A limit  ········   - left · resets 1h0m\nB limit  ········   - left · resets 2h0m",
-  );
-});
-
 test("falls back to neutral labels when window minutes are missing", () => {
   const message = messageFromParsed({
     status: "warn",
     used: { primary: 81, secondary: 9 },
     reset: { primary: "1h0m", secondary: "7d0h" },
-  });
-
-  assert.equal(
-    message,
-    "A limit  ██░░░░░░ 19% left · resets 1h0m\nB limit  ███████░ 91% left · resets 7d0h",
-  );
-});
-
-test("keeps backward compatibility with legacy pair strings", () => {
-  const message = messageFromParsed({
-    status: "warn",
-    used: "81%/9%",
-    reset: "1h0m/7d0h",
   });
 
   assert.equal(

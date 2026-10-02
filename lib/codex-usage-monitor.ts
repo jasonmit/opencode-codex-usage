@@ -94,6 +94,23 @@ export const createQuotaMonitor = (options: QuotaMonitorOptions): QuotaMonitor =
     }
   };
 
+  const shouldNotifyForStatus = (status: string): boolean => {
+    const shouldNotify =
+      shouldToastForBackground(status, options.threshold) &&
+      shouldToastForBackgroundTransition(status, previousStatus);
+
+    previousStatus = status;
+
+    return shouldNotify;
+  };
+
+  const reportFailure = async (detail: string, showFailure: boolean): Promise<void> => {
+    const shouldNotify = shouldNotifyForStatus("error");
+    await logFailure(detail);
+
+    if (showFailure || shouldNotify) await notify(failureToast(detail, options.durationMs));
+  };
+
   const runOnce = async (
     { force = false, showFailure = false }: RefreshOptions,
     runGeneration: number,
@@ -106,27 +123,18 @@ export const createQuotaMonitor = (options: QuotaMonitorOptions): QuotaMonitor =
       const detail = snapshot.error?.trim();
 
       if (detail) {
-        await logFailure(detail);
-
-        if (showFailure) await notify(failureToast(detail, options.durationMs));
+        await reportFailure(detail, showFailure);
 
         return;
       }
 
-      const shouldNotify =
-        force ||
-        (shouldToastForBackground(snapshot.status, options.threshold) &&
-          shouldToastForBackgroundTransition(snapshot.status, previousStatus));
+      const shouldNotify = shouldNotifyForStatus(snapshot.status);
 
-      previousStatus = snapshot.status;
-
-      if (shouldNotify) await notify(toastBodyFromParsed(snapshot, options.durationMs));
+      if (force || shouldNotify) await notify(toastBodyFromParsed(snapshot, options.durationMs));
     } catch (error: unknown) {
       if (runGeneration !== generation) return;
       const detail = error instanceof Error ? error.message : String(error);
-      await logFailure(detail);
-
-      if (showFailure) await notify(failureToast(detail, options.durationMs));
+      await reportFailure(detail, showFailure);
     }
   };
 

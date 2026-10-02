@@ -96,6 +96,16 @@ test("V2 CLI rejects malformed RPC output", async (t) => {
   assert.equal(result.stdout, "");
 });
 
+test("V2 CLI rejects legacy metric pair strings at the RPC boundary", async (t) => {
+  const state = await fixture();
+  t.after(state.cleanup);
+  const host = await fakeOpenCode(state, '{"output":{"status":"ok","used":"23%/4%"}}');
+  const result = state.run(["--json", "--no-notify"], host.env);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /invalid.*quota.*response/i);
+  assert.equal(result.stdout, "");
+});
+
 test("CLI help succeeds without contacting OpenCode", async (t) => {
   const state = await fixture();
   t.after(state.cleanup);

@@ -153,6 +153,88 @@ test("probeQuota ignores malformed model entries before a supported model", asyn
   assert.equal(snapshot.statusCode, 200);
 });
 
+test("model discovery retries transient failures for defaults and configured variants", async () => {
+  for (const model of [undefined, "gpt-5.5-fast"]) {
+    let discoveries = 0;
+
+    const fetchImpl: typeof fetch = async (input) => {
+      if (urlFromFetchInput(input).includes("/codex/models")) {
+        discoveries++;
+
+        if (discoveries === 1) return new Response("unavailable", { status: 503 });
+
+        return new Response(JSON.stringify({ models: [{ slug: "gpt-5.5" }] }));
+      }
+
+      return successResponse();
+    };
+
+    const snapshot = await probeQuota({
+      model,
+      env: {},
+      credentials: { accessToken: "token" },
+      retryCount: 1,
+      fetchImpl,
+    });
+
+    assert.equal(snapshot.status, "warn");
+    assert.equal(discoveries, 2);
+  }
+});
+
+test("model discovery times out and exhausts its bounded retry budget", async () => {
+  let calls = 0;
+
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    calls++;
+    const signal = init?.signal;
+
+    if (!signal) throw new Error("discovery has no timeout");
+
+    return new Promise<Response>((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
+  };
+
+  // Keep the event loop alive: AbortSignal.timeout uses an unref'ed timer.
+  const keepAlive = setInterval(() => undefined, 1000);
+
+  try {
+    const snapshot = await probeQuota({
+      env: {},
+      credentials: { accessToken: "token" },
+      timeoutMs: 5,
+      retryCount: 1,
+      fetchImpl,
+    });
+
+    assert.equal(snapshot.statusCode, "timeout");
+    assert.match(snapshot.error ?? "", /5ms/);
+    assert.equal(calls, 2);
+  } finally {
+    clearInterval(keepAlive);
+  }
+});
+
+test("variant discovery preserves auth errors without retrying or probing", async () => {
+  let calls = 0;
+
+  const snapshot = await probeQuota({
+    credentials: { accessToken: "token" },
+    model: "gpt-5.5-fast",
+    retryCount: 2,
+    fetchImpl: async () => {
+      calls++;
+
+      return new Response(JSON.stringify({ detail: "expired token" }), { status: 401 });
+    },
+  });
+
+  assert.equal(snapshot.statusCode, 401);
+  assert.equal(snapshot.error, "expired token");
+  assert.equal(calls, 1);
+});
+
 test("probeQuota canonicalizes OpenCode model variants to supported Codex slugs", async () => {
   const seenModels: string[] = [];
 
