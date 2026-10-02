@@ -1,4 +1,3 @@
-import { z } from "zod";
 import type { ProbeSnapshot } from "./codex-usage-probe.js";
 import { statusStateNormalized } from "./quota-policy.js";
 
@@ -19,80 +18,6 @@ const unitFormatter = {
     unitDisplay: "narrow",
   }),
 } as const;
-
-const PropertyRecordSchema = z.record(z.string(), z.unknown());
-
-const TextValueSchema = z.union([z.string(), z.number(), z.boolean()]);
-
-const pairFromText = (raw: string): [string, string] => {
-  const normalized = raw.trim();
-
-  if (normalized === "") return ["-", "-"];
-  const [left, right] = normalized.split("/", 2);
-
-  return [left?.trim() || "-", right?.trim() || "-"];
-};
-
-const textFromUnknown = (value: unknown): string => {
-  if (value === null || value === undefined) return "-";
-  const parsed = TextValueSchema.safeParse(value);
-
-  if (!parsed.success) return "-";
-  const normalized = String(parsed.data).trim();
-
-  return normalized === "" ? "-" : normalized;
-};
-
-const pairFromUnknown = (value: unknown): [string, string] => {
-  if (typeof value === "string") return pairFromText(value);
-
-  const record = PropertyRecordSchema.safeParse(value);
-
-  if (record.success) {
-    return [
-      textFromUnknown(record.data.primary ?? record.data.windowA),
-      textFromUnknown(record.data.secondary ?? record.data.windowB),
-    ];
-  }
-
-  return ["-", "-"];
-};
-
-const positiveIntFromUnknown = (value: unknown): number | undefined => {
-  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const normalized = value.trim();
-
-    if (!/^\d+$/.test(normalized)) return undefined;
-    const parsed = Number(normalized);
-
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
-  }
-
-  return undefined;
-};
-
-const windowMinutesPairFromUnknown = (value: unknown): [number | undefined, number | undefined] => {
-  if (typeof value === "string") {
-    const [left, right] = value.trim() === "" ? ["", ""] : value.split("/", 2);
-
-    return [positiveIntFromUnknown(left ?? ""), positiveIntFromUnknown(right ?? "")];
-  }
-
-  const record = PropertyRecordSchema.safeParse(value);
-
-  if (record.success) {
-    return [
-      positiveIntFromUnknown(record.data.primary ?? record.data.windowA),
-      positiveIntFromUnknown(record.data.secondary ?? record.data.windowB),
-    ];
-  }
-
-  return [undefined, undefined];
-};
 
 type ToastVariant = "info" | "warning" | "error";
 
@@ -135,7 +60,7 @@ const toastTitleForStatus = (rawStatus: string | undefined): string => {
   return emoji ? `Codex quota ${emoji}` : "Codex quota";
 };
 
-const windowLabelFromMinutes = (minutes: number | undefined, fallback: string): string => {
+const windowLabelFromMinutes = (minutes: number | null | undefined, fallback: string): string => {
   if (!minutes || !Number.isFinite(minutes) || minutes <= 0) return fallback;
 
   const dayMinutes = 24 * 60;
@@ -155,20 +80,8 @@ const windowLabelFromMinutes = (minutes: number | undefined, fallback: string): 
   return `${unitFormatter.minute.format(minutes)} window`;
 };
 
-const percentageFromText = (value: string): number | undefined => {
-  const normalized = value.trim();
-
-  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%?$/.test(normalized)) return undefined;
-
-  const parsed = Number(normalized.replace(/%$/, ""));
-
-  return Number.isFinite(parsed) ? parsed : undefined;
-};
-
-const remainingPercentage = (value: string): number | undefined => {
-  const used = percentageFromText(value);
-
-  return used === undefined ? undefined : Math.max(0, Math.min(100, 100 - used));
+const remainingPercentage = (used: number | null | undefined): number | undefined => {
+  return used === null || used === undefined ? undefined : Math.max(0, Math.min(100, 100 - used));
 };
 
 const quotaBar = (remaining: number | undefined, width = 8): string => {
@@ -179,49 +92,44 @@ const quotaBar = (remaining: number | undefined, width = 8): string => {
   return `${"█".repeat(filled)}${"░".repeat(width - filled)}`;
 };
 
-const quotaWindowLabel = (minutes: number | undefined, fallback: string): string => {
+const quotaWindowLabel = (minutes: number | null | undefined, fallback: string): string => {
   if (minutes === 7 * 24 * 60) return "Weekly limit";
 
   return `${windowLabelFromMinutes(minutes, fallback).replace(/\s+window$/, "")} limit`;
 };
 
-type ProbeDisplaySnapshot = Omit<ProbeSnapshot, "used" | "reset" | "windowMinutes"> & {
-  used?: unknown;
-  reset?: unknown;
-  windowMinutes?: unknown;
-};
-
-export const messageFromParsed = (parsed: ProbeDisplaySnapshot): string => {
+export const messageFromParsed = (parsed: ProbeSnapshot): string => {
   const error = parsed.error?.trim();
 
   if (error) {
     return "quota probe failed";
   }
 
-  const [windowA, windowB] = windowMinutesPairFromUnknown(parsed.windowMinutes);
+  const windowA = parsed.windowMinutes?.primary;
+  const windowB = parsed.windowMinutes?.secondary;
   const firstWindowLabel = quotaWindowLabel(windowA, "A");
   const secondWindowLabel = quotaWindowLabel(windowB, "B");
-  const [usedWindowA, usedWindowB] = pairFromUnknown(parsed.used);
-  const [resetWindowA, resetWindowB] = pairFromUnknown(parsed.reset);
 
   const windows = [
     {
       minutes: windowA,
       label: firstWindowLabel,
-      used: usedWindowA,
-      reset: resetWindowA,
+      used: parsed.used?.primary,
+      reset: parsed.reset?.primary?.trim() || "-",
     },
     {
       minutes: windowB,
       label: secondWindowLabel,
-      used: usedWindowB,
-      reset: resetWindowB,
+      used: parsed.used?.secondary,
+      reset: parsed.reset?.secondary?.trim() || "-",
     },
   ];
 
   const visibleWindows = windows.filter(
     ({ minutes, used, reset }) =>
-      minutes !== undefined || Number.parseFloat(used) !== 0 || reset !== "0m",
+      (minutes !== undefined && minutes !== null && Number.isInteger(minutes) && minutes > 0) ||
+      used !== 0 ||
+      reset !== "0m",
   );
 
   const labelWidth = Math.max(...visibleWindows.map(({ label }) => label.length));
@@ -236,7 +144,7 @@ export const messageFromParsed = (parsed: ProbeDisplaySnapshot): string => {
     .join("\n");
 };
 
-export const toastBodyFromParsed = (parsed: ProbeDisplaySnapshot, duration: number): ToastBody => {
+export const toastBodyFromParsed = (parsed: ProbeSnapshot, duration: number): ToastBody => {
   const message = messageFromParsed(parsed);
 
   return {

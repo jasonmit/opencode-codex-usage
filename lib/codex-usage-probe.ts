@@ -71,11 +71,6 @@ const MODEL_ENV = "OPENCODE_CODEX_QUOTA_MODEL";
 
 const MAX_RETRY_COUNT = 2;
 
-type WindowPair<T> = {
-  primary: T;
-  secondary: T;
-};
-
 const NumberWindowPairSchema = z
   .object({
     primary: z.number().nullable(),
@@ -94,9 +89,9 @@ export const ProbeSnapshotSchema = z
   .object({
     status: z.string(),
     statusCode: z.union([z.number(), z.string()]).optional(),
-    used: z.union([NumberWindowPairSchema, z.string()]).optional(),
-    reset: z.union([StringWindowPairSchema, z.string()]).optional(),
-    windowMinutes: z.union([NumberWindowPairSchema, z.string()]).optional(),
+    used: NumberWindowPairSchema.optional(),
+    reset: StringWindowPairSchema.optional(),
+    windowMinutes: NumberWindowPairSchema.optional(),
     plan: z.string().optional(),
     profile: z.string().optional(),
     probeTokens: z.number().optional(),
@@ -204,16 +199,18 @@ const shouldCanonicalizeConfiguredModel = (model: string): boolean => {
   return /-(fast|low|medium|high|xhigh|minimal)$/.test(model);
 };
 
-const resolveSupportedProbeModels = async (
+const fetchSupportedProbeModels = async (
   access: string,
   accountId: string,
   fetchImpl: typeof fetch,
+  timeoutMs: number,
 ): Promise<string[] | ProbeSnapshot> => {
   let response: Response;
   let responseText = "";
 
   try {
     response = await fetchImpl(CODEX_MODELS_URL, {
+      signal: AbortSignal.timeout(timeoutMs),
       headers: {
         Authorization: `Bearer ${access}`,
         accept: "application/json",
@@ -225,6 +222,10 @@ const resolveSupportedProbeModels = async (
 
     responseText = await response.text();
   } catch (error) {
+    if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
+      return toProbeError("error", `request timed out after ${timeoutMs}ms`, "timeout");
+    }
+
     const detail = errorMessage(error);
 
     return toProbeError("error", detail.slice(0, 120), "network");
@@ -262,12 +263,37 @@ const resolveSupportedProbeModels = async (
   return toProbeError("error", "no supported Codex models returned for this account", "model");
 };
 
+const resolveSupportedProbeModels = async (
+  access: string,
+  accountId: string,
+  fetchImpl: typeof fetch,
+  timeoutMs: number,
+  retryCount: number,
+): Promise<string[] | ProbeSnapshot> => {
+  let result = await fetchSupportedProbeModels(access, accountId, fetchImpl, timeoutMs);
+
+  for (let attempt = 0; attempt < retryCount; attempt++) {
+    if (!("status" in result) || !isRetryableProbeFailure(result)) break;
+    result = await fetchSupportedProbeModels(access, accountId, fetchImpl, timeoutMs);
+  }
+
+  return result;
+};
+
 const resolveDefaultProbeModel = async (
   access: string,
   accountId: string,
   fetchImpl: typeof fetch,
+  timeoutMs: number,
+  retryCount: number,
 ): Promise<string | ProbeSnapshot> => {
-  const supportedModels = await resolveSupportedProbeModels(access, accountId, fetchImpl);
+  const supportedModels = await resolveSupportedProbeModels(
+    access,
+    accountId,
+    fetchImpl,
+    timeoutMs,
+    retryCount,
+  );
 
   if ("status" in supportedModels) return supportedModels;
 
@@ -282,12 +308,20 @@ const canonicalizeConfiguredProbeModel = async (
   access: string,
   accountId: string,
   fetchImpl: typeof fetch,
-): Promise<string> => {
+  timeoutMs: number,
+  retryCount: number,
+): Promise<string | ProbeSnapshot> => {
   if (!shouldCanonicalizeConfiguredModel(model)) return model;
 
-  const supportedModels = await resolveSupportedProbeModels(access, accountId, fetchImpl);
+  const supportedModels = await resolveSupportedProbeModels(
+    access,
+    accountId,
+    fetchImpl,
+    timeoutMs,
+    retryCount,
+  );
 
-  if ("status" in supportedModels) return model;
+  if ("status" in supportedModels) return supportedModels;
 
   const sorted = [...supportedModels].sort((left, right) => right.length - left.length);
 
@@ -421,17 +455,6 @@ const statusEmoji = (state: string): string => {
   return "❓";
 };
 
-const pairOrNull = <T>(value: WindowPair<T | null> | string | undefined): WindowPair<T | null> => {
-  if (typeof value !== "object" || value === null) {
-    return { primary: null, secondary: null };
-  }
-
-  return {
-    primary: value.primary ?? null,
-    secondary: value.secondary ?? null,
-  };
-};
-
 const formatPrettyProbeOutput = (snapshot: ProbeSnapshot): string => {
   const state = prettyState(snapshot.status);
   const stateWithEmoji = `${state} ${statusEmoji(state)}`;
@@ -444,12 +467,12 @@ const formatPrettyProbeOutput = (snapshot: ProbeSnapshot): string => {
     ].join("\n");
   }
 
-  const used = pairOrNull<number>(snapshot.used);
-  const reset = pairOrNull<string>(snapshot.reset);
-  const windowMinutes = pairOrNull<number>(snapshot.windowMinutes);
+  const used = snapshot.used;
+  const reset = snapshot.reset;
+  const windowMinutes = snapshot.windowMinutes;
 
-  const primaryLabel = windowLabel(windowMinutes.primary, "window A");
-  const secondaryLabel = windowLabel(windowMinutes.secondary, "window B");
+  const primaryLabel = windowLabel(windowMinutes?.primary, "window A");
+  const secondaryLabel = windowLabel(windowMinutes?.secondary, "window B");
 
   const labelWidth = Math.max(
     "codex quota".length,
@@ -467,8 +490,8 @@ const formatPrettyProbeOutput = (snapshot: ProbeSnapshot): string => {
       labelWidth,
       `${snapshot.plan ?? "-"} / ${snapshot.profile ?? "-"}`,
     ),
-    prettyLine(primaryLabel, labelWidth, used.primary, reset.primary),
-    prettyLine(secondaryLabel, labelWidth, used.secondary, reset.secondary),
+    prettyLine(primaryLabel, labelWidth, used?.primary, reset?.primary),
+    prettyLine(secondaryLabel, labelWidth, used?.secondary, reset?.secondary),
   ];
 
   return lines.join("\n");
@@ -643,8 +666,16 @@ export const probeQuota = async (options: ProbeQuotaOptions = {}): Promise<Probe
         credentials.access,
         credentials.accountId,
         fetchImpl,
+        timeoutMs,
+        retryCount,
       )
-    : await resolveDefaultProbeModel(credentials.access, credentials.accountId, fetchImpl);
+    : await resolveDefaultProbeModel(
+        credentials.access,
+        credentials.accountId,
+        fetchImpl,
+        timeoutMs,
+        retryCount,
+      );
 
   if (typeof resolvedModel !== "string") return resolvedModel;
 
