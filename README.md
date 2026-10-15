@@ -6,7 +6,9 @@ Check your Codex quota without leaving OpenCode. Ask the assistant, run `/codex-
 
 ## Install
 
-Connect your ChatGPT account with `/connect` in OpenCode, then:
+Connect your ChatGPT account with `/connect` in OpenCode. In **OpenCode 2**, choose **OpenAI → Codex browser (legacy)** or **Codex device code (legacy)** and make that account active. The newer **Sign in with ChatGPT** (token-sharing) method is not currently supported by this plugin, even when it works for model requests.
+
+Then:
 
 ```bash
 npm install -g opencode-codex-usage
@@ -47,7 +49,9 @@ Terminal queries require the plugin installed and `opencode` on your `PATH`.
 
 ## Settings & troubleshooting
 
-For expired-token errors, reconnect your ChatGPT account with `/connect`.
+**`401 Unauthorized` with OpenCode 2:** the newer **Sign in with ChatGPT** method uses token-sharing credentials that the plugin's legacy Codex endpoint rejects. Run `/connect`, select **OpenAI**, add an account using **Codex browser (legacy)** or **Codex device code (legacy)**, and make the new account active. Then retry `/codex-usage`. Reconnecting through **Sign in with ChatGPT** does not resolve this incompatibility.
+
+For expired-token errors, reconnect your ChatGPT account with `/connect`, using one of the legacy Codex methods above on OpenCode 2.
 
 <details>
 <summary>Optional settings</summary>
